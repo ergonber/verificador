@@ -6,10 +6,10 @@ export default function Home() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // TUS DATOS REALES DE SONIC
+  // TUS DATOS REALES DE SONIC TESTNET
   const CONTRACT_ADDRESS = "0xa3081cd8f09dee3e5f0bcff197a40ff90720a05f";
-  const SONIC_RPC_URL = "https://rpc.soniclabs.com"; // RPC público de SONIC
-  
+  const SONIC_TESTNET_RPC = "https://rpc.soniclabs.com/testnet";
+
   const CONTRACT_ABI = [
     {
       "inputs": [],
@@ -100,25 +100,6 @@ export default function Home() {
     {
       "inputs": [
         {
-          "internalType": "string",
-          "name": "",
-          "type": "string"
-        }
-      ],
-      "name": "hashToCertificateId",
-      "outputs": [
-        {
-          "internalType": "bytes32",
-          "name": "",
-          "type": "bytes32"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
           "internalType": "bytes32",
           "name": "_certificateId",
           "type": "bytes32"
@@ -136,24 +117,13 @@ export default function Home() {
       "type": "function"
     },
     {
-      "inputs": [
-        {
-          "internalType": "string",
-          "name": "_arweaveHash",
-          "type": "string"
-        }
-      ],
-      "name": "verifyCertificateByHash",
+      "inputs": [],
+      "name": "certificateCount",
       "outputs": [
         {
-          "internalType": "bool",
+          "internalType": "uint256",
           "name": "",
-          "type": "bool"
-        },
-        {
-          "internalType": "bytes32",
-          "name": "",
-          "type": "bytes32"
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
@@ -163,7 +133,7 @@ export default function Home() {
 
   const verifyCertificate = async () => {
     if (!searchInput.trim()) {
-      alert("Por favor ingresa un ID del certificado o hash Arweave");
+      alert("Por favor ingresa el ID del certificado");
       return;
     }
 
@@ -171,61 +141,55 @@ export default function Home() {
     setResult(null);
 
     try {
-      // Conexión directa al RPC de SONIC - SIN necesidad de wallet
-      const web3 = new Web3(SONIC_RPC_URL);
+      console.log("🔗 Conectando a Sonic Testnet...");
+      
+      // Conexión directa al RPC de Sonic Testnet
+      const web3 = new Web3(SONIC_TESTNET_RPC);
       const contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
+
+      // Verificar conexión obteniendo el conteo de certificados
+      try {
+        const certificateCount = await contract.methods.certificateCount().call();
+        console.log("✅ Conexión exitosa. Total certificados:", certificateCount);
+      } catch (error) {
+        console.error("❌ Error en conexión:", error);
+        throw new Error("No se pudo conectar al contrato en Sonic Testnet");
+      }
 
       let isValid = false;
       let certificateData = null;
-      let certificateId = null;
-      let searchMethod = '';
+      const certificateId = searchInput;
 
-      // Intentar buscar por hash Arweave
-      if (searchInput.length === 43 || searchInput.startsWith('_') || searchInput === 'test-456') {
-        try {
-          searchMethod = 'hash';
-          // Primero obtener el certificateId desde el hash
-          certificateId = await contract.methods.hashToCertificateId(searchInput).call();
-          
-          if (certificateId !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
-            // Si encontramos un certificateId, verificar y obtener datos
-            isValid = await contract.methods.verifyCertificate(certificateId).call();
-            if (isValid) {
-              certificateData = await contract.methods.getCertificate(certificateId).call();
-            }
-          }
-        } catch (error) {
-          console.log("No se encontró certificado con este hash:", error);
-        }
-      }
+      console.log("🔍 Buscando certificado:", certificateId);
 
-      // Si no se encontró por hash, intentar directamente como certificateId
-      if (!certificateData && searchInput.length === 66 && searchInput.startsWith('0x')) {
-        try {
-          searchMethod = 'id';
-          certificateId = searchInput;
-          isValid = await contract.methods.verifyCertificate(certificateId).call();
-          if (isValid) {
-            certificateData = await contract.methods.getCertificate(certificateId).call();
-          }
-        } catch (error) {
-          console.log("No es un certificateId válido:", error);
+      // Buscar directamente por certificateId
+      try {
+        isValid = await contract.methods.verifyCertificate(certificateId).call();
+        console.log("✅ Certificado válido:", isValid);
+        
+        if (isValid) {
+          certificateData = await contract.methods.getCertificate(certificateId).call();
+          console.log("📄 Datos del certificado:", certificateData);
+        } else {
+          console.log("❌ Certificado no válido o revocado");
         }
+      } catch (error) {
+        console.log("❌ Error buscando certificado:", error.message);
+        throw new Error("ID de certificado inválido o no encontrado");
       }
 
       setResult({
         isValid,
         certificateData,
         certificateId,
-        found: !!certificateData,
-        searchMethod
+        found: !!certificateData
       });
 
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Error general:", error);
       setResult({
         isValid: false,
-        error: "Error conectando con la blockchain SONIC. Intenta nuevamente.",
+        error: error.message,
         found: false
       });
     }
@@ -233,27 +197,20 @@ export default function Home() {
     setLoading(false);
   };
 
-  // Datos de ejemplo para probar
-  const testExamples = [
-    {
-      type: "ID del Certificado",
-      value: "0xd6744e56044c09b08b250164f512a6c26aeabbedb46403288e84f0550f122ea1",
-      description: "Certificado de Jesus tincona"
-    },
-    {
-      type: "Hash Arweave", 
-      value: "test-456",
-      description: "Mismo certificado por hash"
-    }
-  ];
+  // Solo el ID del certificado para probar
+  const testExample = {
+    type: "ID del Certificado",
+    value: "0xd6744e56044c09b08b250164f512a6c26aeabbedb46403288e84f0550f122ea1",
+    description: "Certificado de Jesus tincona - Crypto Cocha"
+  };
 
   return (
     <div className="container">
       <header>
-        <h1>🔍 Verificador de Certificados Asoblockchain</h1>
-        <p>Verifica la autenticidad de certificados en la blockchain SONIC</p>
+        <h1>🔍 Verificador de Certificados</h1>
+        <p>Verifica certificados en <strong>SONIC TESTNET</strong></p>
         <div className="contract-info">
-          <p><strong>Contrato Verificado:</strong> <code>{CONTRACT_ADDRESS}</code></p>
+          <p><strong>Contrato:</strong> <code>{CONTRACT_ADDRESS}</code></p>
         </div>
       </header>
 
@@ -261,7 +218,7 @@ export default function Home() {
         <div className="search-box">
           <input
             type="text"
-            placeholder="Ingresa ID del certificado (0x...) o hash Arweave"
+            placeholder="Ingresa el ID del certificado (0x...)"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && verifyCertificate()}
@@ -271,26 +228,22 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Ejemplos para probar */}
+        {/* Ejemplo para probar */}
         <div className="examples">
-          <h3>💡 Ejemplos para probar:</h3>
-          <div className="example-cards">
-            {testExamples.map((example, index) => (
-              <div key={index} className="example-card">
-                <p><strong>{example.type}:</strong></p>
-                <code>{example.value}</code>
-                <p><small>{example.description}</small></p>
-                <button 
-                  onClick={() => {
-                    setSearchInput(example.value);
-                    setTimeout(verifyCertificate, 100);
-                  }}
-                  className="example-btn"
-                >
-                  Probar este
-                </button>
-              </div>
-            ))}
+          <h3>💡 Ejemplo para probar:</h3>
+          <div className="example-card">
+            <p><strong>{testExample.type}:</strong></p>
+            <code>{testExample.value}</code>
+            <p><small>{testExample.description}</small></p>
+            <button 
+              onClick={() => {
+                setSearchInput(testExample.value);
+                setTimeout(verifyCertificate, 100);
+              }}
+              className="example-btn"
+            >
+              Probar este certificado
+            </button>
           </div>
         </div>
 
@@ -298,37 +251,42 @@ export default function Home() {
           <div className={`result ${result.isValid ? 'valid' : 'invalid'}`}>
             {result.error ? (
               <div>
-                <h3>❌ Error de Conexión</h3>
+                <h3>❌ Error</h3>
                 <p>{result.error}</p>
+                <div className="help-text">
+                  <p><strong>Posibles soluciones:</strong></p>
+                  <ul>
+                    <li>Verifica que el ID del certificado sea correcto</li>
+                    <li>Confirma que el certificado fue emitido en Sonic Testnet</li>
+                    <li>Revisa la consola del navegador (F12) para más detalles</li>
+                  </ul>
+                </div>
               </div>
             ) : result.found && result.isValid ? (
               <div>
                 <h3>✅ CERTIFICADO VÁLIDO</h3>
-                <p><small>Búsqueda por: {result.searchMethod === 'hash' ? 'Hash Arweave' : 'ID del Certificado'}</small></p>
                 <div className="certificate-info">
-                  <p><strong>👤 Nombre del Estudiante:</strong> {result.certificateData.recipientName}</p>
-                  <p><strong>🎓 Evento/Curso:</strong> {result.certificateData.eventName}</p>
+                  <p><strong>👤 Estudiante:</strong> {result.certificateData.recipientName}</p>
+                  <p><strong>🎓 Curso/Evento:</strong> {result.certificateData.eventName}</p>
                   <p><strong>📅 Fecha de Emisión:</strong> {new Date(result.certificateData.issueDate * 1000).toLocaleDateString('es-ES')}</p>
-                  <p><strong>🆔 ID del Certificado:</strong> </p>
+                  <p><strong>🆔 ID del Certificado:</strong></p>
                   <code className="certificate-id">{result.certificateId}</code>
-                  <p><strong>📄 Hash Arweave:</strong> </p>
-                  <code>{result.certificateData.arweaveHash}</code>
                   <p><strong>🏢 Emitido por:</strong> {result.certificateData.issuer}</p>
                   
                   <div className="blockchain-proof">
                     <p>✅ <strong>Verificado en Blockchain SONIC</strong></p>
-                    <small>Datos consultados directamente desde el contrato inteligente</small>
+                    <small>Los datos mostrados están almacenados directamente en el contrato inteligente</small>
                   </div>
                 </div>
               </div>
             ) : (
               <div>
-                <h3>❌ CERTIFICADO NO ENCONTRADO</h3>
-                <p>No se encontró un certificado válido en la blockchain SONIC.</p>
+                <h3>❌ CERTIFICADO NO VÁLIDO</h3>
+                <p>El certificado no existe o ha sido revocado.</p>
                 <div className="help-text">
                   <p><strong>Verifica que:</strong></p>
                   <ul>
-                    <li>El ID o hash sea correcto</li>
+                    <li>El ID del certificado sea correcto</li>
                     <li>El certificado no haya sido revocado</li>
                     <li>El certificado exista en el contrato</li>
                   </ul>
@@ -339,30 +297,27 @@ export default function Home() {
         )}
 
         <div className="instructions">
-          <h3>¿Cómo funciona?</h3>
+          <h3>📋 Cómo usar:</h3>
           <div className="steps">
             <div className="step">
-              <strong>1. Ingresa los datos</strong>
-              <p>Pega el <code>ID del certificado</code> o el <code>hash Arweave</code></p>
+              <strong>1. Obtén el ID del certificado</strong>
+              <p>El ID es un código único que comienza con "0x..."</p>
             </div>
             <div className="step">
-              <strong>2. Consulta automática</strong>
-              <p>El sistema consulta directamente el contrato en SONIC</p>
+              <strong>2. Pega el ID en el campo de búsqueda</strong>
+              <p>También puedes usar el botón de ejemplo para probar</p>
             </div>
             <div className="step">
-              <strong>3. Resultado instantáneo</strong>
-              <p>Muestra los datos almacenados en la blockchain</p>
+              <strong>3. Haz clic en "Verificar Certificado"</strong>
+              <p>El sistema consultará directamente la blockchain SONIC</p>
             </div>
-          </div>
-          <div className="note">
-            <p>💡 <strong>Nota:</strong> No se requiere conexión de wallet. Solo lectura pública de la blockchain.</p>
           </div>
         </div>
       </main>
 
       <style jsx>{`
         .container {
-          max-width: 800px;
+          max-width: 700px;
           margin: 0 auto;
           padding: 20px;
           font-family: Arial, sans-serif;
@@ -422,25 +377,22 @@ export default function Home() {
         }
         .examples {
           margin-bottom: 30px;
-        }
-        .example-cards {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-          gap: 15px;
-          margin-top: 15px;
+          text-align: center;
         }
         .example-card {
           background: white;
-          padding: 15px;
+          padding: 20px;
           border-radius: 10px;
           border: 2px solid #e9ecef;
-          text-align: center;
+          display: inline-block;
+          margin: 0 auto;
         }
         .example-btn {
           background: #6c757d;
-          padding: 8px 15px;
+          padding: 10px 20px;
           font-size: 14px;
           margin-top: 10px;
+          color: white;
         }
         .example-btn:hover {
           background: #5a6268;
@@ -508,21 +460,14 @@ export default function Home() {
         }
         .steps {
           display: grid;
-          gap: 20px;
+          gap: 15px;
           margin-top: 15px;
         }
         .step {
-          padding: 20px;
-          background: #f8f9fa;
-          border-radius: 10px;
-          border-left: 4px solid #2c5530;
-        }
-        .note {
-          margin-top: 20px;
           padding: 15px;
-          background: #e7f3ff;
+          background: #f8f9fa;
           border-radius: 8px;
-          border-left: 4px solid #007bff;
+          border-left: 4px solid #2c5530;
         }
       `}</style>
     </div>
