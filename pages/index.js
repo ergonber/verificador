@@ -2,16 +2,17 @@ import { useState, useEffect } from 'react';
 import Web3 from 'web3';
 
 export default function Home() {
+  const [certificateId, setCertificateId] = useState('');
   const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [networkStatus, setNetworkStatus] = useState('checking');
 
   // CONFIGURACIÓN QUEMADA EN CÓDIGO
   const CONTRACT_ADDRESS = "0xa3081cd8f09dee3e5f0bcff197a40ff90720a05f";
   const SONIC_RPC_URL = "https://rpc.testnet.soniclabs.com";
   
-  // CERTIFICATE_ID quemado - este es el ID que se generó en tu transacción
-  const CERTIFICATE_ID = "0x230b0aadbd10f4c4ecce55b5151812554eccf70145e733fb916fe18ca802e97a";
+  // CERTIFICATE_ID de ejemplo (el de Jesus tincona)
+  const EXAMPLE_CERTIFICATE_ID = "0xd6744e56044c09b08b250164f512a6c26aeabbedb46403288e84f0550f122ea1";
 
   const CONTRACT_ABI = [
     {
@@ -80,14 +81,27 @@ export default function Home() {
   ];
 
   useEffect(() => {
-    console.log("🚀 INICIANDO VERIFICACIÓN AUTOMÁTICA");
+    console.log("🚀 Verificador de Certificados listo");
     console.log("🔧 Configuración:");
     console.log("   RPC:", SONIC_RPC_URL);
     console.log("   Contrato:", CONTRACT_ADDRESS);
-    console.log("   CertificateId:", CERTIFICATE_ID);
     
-    verifyCertificate();
+    checkNetworkStatus();
   }, []);
+
+  const checkNetworkStatus = async () => {
+    setNetworkStatus('checking');
+
+    try {
+      const web3 = new Web3(SONIC_RPC_URL);
+      const blockNumber = await web3.eth.getBlockNumber();
+      console.log(`✅ Conectado a Sonic Testnet - Block: ${blockNumber}`);
+      setNetworkStatus('connected');
+    } catch (error) {
+      console.log(`❌ Error de conexión: ${error.message}`);
+      setNetworkStatus('disconnected');
+    }
+  };
 
   const convertBigIntToNumber = (bigIntValue) => {
     if (typeof bigIntValue === 'bigint') {
@@ -96,24 +110,36 @@ export default function Home() {
     return Number(bigIntValue);
   };
 
-  const verifyCertificate = async () => {
+  const verifyCertificate = async (idToVerify = certificateId) => {
+    if (!idToVerify.trim()) {
+      alert("Por favor ingresa el ID del certificado");
+      return;
+    }
+
+    // Validar formato de certificateId
+    if (idToVerify.length !== 66 || !idToVerify.startsWith('0x')) {
+      alert("El ID del certificado debe tener 66 caracteres y comenzar con '0x'");
+      return;
+    }
+
+    console.log("🚀 INICIANDO VERIFICACIÓN...");
+    console.log(`🔍 CertificateId: ${idToVerify}`);
+    
     setLoading(true);
-    setNetworkStatus('checking');
+    setResult(null);
 
     try {
-      console.log("🔍 Conectando a Sonic Testnet...");
+      if (networkStatus === 'disconnected') {
+        throw new Error("No hay conexión a Sonic Testnet");
+      }
+
       const web3 = new Web3(SONIC_RPC_URL);
       const contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
 
-      // Probar conexión
-      const blockNumber = await web3.eth.getBlockNumber();
-      console.log(`✅ Conectado - Block: ${blockNumber}`);
-      setNetworkStatus('connected');
-
-      console.log("🔍 Verificando certificado...");
+      console.log("🔍 Verificando validez del certificado...");
       
       // 1. Verificar si el certificado es válido
-      const isValid = await contract.methods.verifyCertificate(CERTIFICATE_ID).call();
+      const isValid = await contract.methods.verifyCertificate(idToVerify).call();
       console.log(`✅ Certificado válido: ${isValid}`);
 
       if (!isValid) {
@@ -123,7 +149,7 @@ export default function Home() {
       console.log("📋 Obteniendo datos del certificado...");
       
       // 2. Obtener todos los datos del certificado
-      const rawData = await contract.methods.getCertificate(CERTIFICATE_ID).call();
+      const rawData = await contract.methods.getCertificate(idToVerify).call();
       console.log("📊 Datos obtenidos:", rawData);
 
       // Procesar datos
@@ -134,7 +160,7 @@ export default function Home() {
         arweaveHash: rawData.arweaveHash,
         issueDate: convertBigIntToNumber(rawData.issueDate),
         isActive: rawData.isActive,
-        certificateId: CERTIFICATE_ID
+        certificateId: idToVerify
       };
 
       setResult({
@@ -145,7 +171,6 @@ export default function Home() {
 
     } catch (error) {
       console.error("💥 ERROR:", error);
-      setNetworkStatus('disconnected');
       setResult({
         isValid: false,
         error: error.message,
@@ -156,6 +181,11 @@ export default function Home() {
     setLoading(false);
   };
 
+  const useExampleCertificate = () => {
+    setCertificateId(EXAMPLE_CERTIFICATE_ID);
+    setTimeout(() => verifyCertificate(EXAMPLE_CERTIFICATE_ID), 100);
+  };
+
   const retryVerification = () => {
     setResult(null);
     verifyCertificate();
@@ -164,8 +194,8 @@ export default function Home() {
   return (
     <div className="container">
       <header>
-        <h1>✅ Verificador de Certificados</h1>
-        <p>Verificación automática en <strong>SONIC TESTNET</strong></p>
+        <h1>🔍 Verificador de Certificados</h1>
+        <p>Verifica certificados en <strong>SONIC TESTNET</strong></p>
         
         <div className={`network-status ${networkStatus}`}>
           {networkStatus === 'checking' && (
@@ -184,18 +214,61 @@ export default function Home() {
             <div className="status-disconnected">
               <span className="status-dot disconnected"></span>
               ❌ ERROR DE CONEXIÓN
+              <button onClick={checkNetworkStatus} className="retry-btn small">
+                Reintentar
+              </button>
             </div>
           )}
         </div>
       </header>
 
       <main>
-        {loading ? (
+        {/* Campo de entrada para certificateId */}
+        <div className="input-section">
+          <div className="input-group">
+            <label htmlFor="certificateId">ID del Certificado:</label>
+            <input
+              id="certificateId"
+              type="text"
+              placeholder="Ingresa el ID del certificado (0x...)"
+              value={certificateId}
+              onChange={(e) => setCertificateId(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && verifyCertificate()}
+            />
+            <button 
+              onClick={() => verifyCertificate()}
+              disabled={loading || networkStatus !== 'connected'}
+              className="verify-btn"
+            >
+              {loading ? '🔍 Verificando...' : '✅ Verificar Certificado'}
+            </button>
+          </div>
+
+          <div className="example-section">
+            <p>💡 <strong>Ejemplo para probar:</strong></p>
+            <div className="example-card">
+              <code>{EXAMPLE_CERTIFICATE_ID}</code>
+              <p><small>Certificado de Jesus tincona - Crypto Cocha</small></p>
+              <button 
+                onClick={useExampleCertificate}
+                disabled={networkStatus !== 'connected'}
+                className="example-btn"
+              >
+                Usar este ejemplo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Resultados de la verificación */}
+        {loading && (
           <div className="loading">
             <div className="spinner"></div>
             <p>Verificando certificado en blockchain...</p>
           </div>
-        ) : result && result.found && result.isValid ? (
+        )}
+
+        {result && result.found && result.isValid ? (
           <div className="result valid">
             <div className="success-header">
               <h2>🎉 CERTIFICADO VERIFICADO EXITOSAMENTE</h2>
@@ -247,7 +320,7 @@ export default function Home() {
                 <div className="proof-details">
                   <p><strong>Red:</strong> Sonic Testnet (ChainID: 14601)</p>
                   <p><strong>Contrato:</strong> {CONTRACT_ADDRESS}</p>
-                  <p><strong>Transacción:</strong> 0xd3ed1584d1bf39c7f6e78d6d18b04c6b4b9fc510f6e58d3e918c56b3cf2da819</p>
+                  <p><strong>RPC:</strong> {SONIC_RPC_URL}</p>
                 </div>
               </div>
             </div>
@@ -263,7 +336,7 @@ export default function Home() {
               <div className="help-text">
                 <p><strong>Información para debugging:</strong></p>
                 <ul>
-                  <li><strong>CertificateId probado:</strong> {CERTIFICATE_ID}</li>
+                  <li><strong>CertificateId probado:</strong> {certificateId}</li>
                   <li><strong>Contrato:</strong> {CONTRACT_ADDRESS}</li>
                   <li><strong>RPC:</strong> {SONIC_RPC_URL}</li>
                   <li><strong>Estado de red:</strong> {networkStatus}</li>
@@ -291,8 +364,8 @@ export default function Home() {
               <code>{CONTRACT_ADDRESS.slice(0, 10)}...{CONTRACT_ADDRESS.slice(-8)}</code>
             </div>
             <div className="info-item">
-              <strong>CertificateId:</strong>
-              <code>{CERTIFICATE_ID.slice(0, 20)}...</code>
+              <strong>RPC:</strong> 
+              <code>{SONIC_RPC_URL}</code>
             </div>
           </div>
         </div>
@@ -326,6 +399,9 @@ export default function Home() {
           padding: 15px;
           border-radius: 10px;
           font-weight: bold;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
         
         .network-status.connected {
@@ -361,9 +437,105 @@ export default function Home() {
           animation: pulse 1.5s infinite;
         }
         
+        .retry-btn.small {
+          margin-left: 15px;
+          padding: 5px 10px;
+          background: #dc3545;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          font-size: 12px;
+          cursor: pointer;
+        }
+        
+        .input-section {
+          background: white;
+          padding: 30px;
+          border-radius: 15px;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+          margin-bottom: 30px;
+        }
+        
+        .input-group {
+          margin-bottom: 25px;
+        }
+        
+        label {
+          display: block;
+          margin-bottom: 8px;
+          font-weight: bold;
+          color: #495057;
+        }
+        
+        input {
+          width: 100%;
+          padding: 15px;
+          border: 2px solid #ddd;
+          border-radius: 10px;
+          font-size: 16px;
+          margin-bottom: 15px;
+        }
+        
+        input:focus {
+          outline: none;
+          border-color: #2c5530;
+        }
+        
+        .verify-btn {
+          width: 100%;
+          padding: 15px;
+          background: #2c5530;
+          color: white;
+          border: none;
+          border-radius: 10px;
+          font-size: 16px;
+          font-weight: bold;
+          cursor: pointer;
+        }
+        
+        .verify-btn:hover:not(:disabled) {
+          background: #1e3a24;
+        }
+        
+        .verify-btn:disabled {
+          background: #ccc;
+          cursor: not-allowed;
+        }
+        
+        .example-section {
+          border-top: 2px solid #f8f9fa;
+          padding-top: 20px;
+        }
+        
+        .example-card {
+          background: #f8f9fa;
+          padding: 15px;
+          border-radius: 8px;
+          margin-top: 10px;
+          text-align: center;
+        }
+        
+        .example-btn {
+          background: #6c757d;
+          color: white;
+          border: none;
+          padding: 8px 16px;
+          border-radius: 6px;
+          cursor: pointer;
+          margin-top: 10px;
+        }
+        
+        .example-btn:hover:not(:disabled) {
+          background: #5a6268;
+        }
+        
         .loading {
           text-align: center;
           padding: 60px 20px;
+          background: white;
+          border-radius: 15px;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+          margin-bottom: 30px;
         }
         
         .spinner {
