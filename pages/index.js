@@ -8,14 +8,19 @@ export default function Home() {
   const [networkStatus, setNetworkStatus] = useState('checking');
   const [currentRPC, setCurrentRPC] = useState('');
 
-  // RPCs de Sonic Testnet - ordenados por confiabilidad
-  const SONIC_RPC_URLS = [
-    "https://sonic-testnet.drpc.org",  // Este funciona según tus logs
-    "https://rpc-testnet.sonicscan.org", 
-    "https://testnet.soniclabs.com"
-  ];
+  // CONTRATO en Sonic Testnet - TU CONTRATO REAL
+  const CONTRACT_ADDRESS = "0xa3081cd8f09dee3e5f0bcff197a40ff90720a05f";
+  
+  // RPC de Sonic Testnet - USANDO TU URL
+  const SONIC_RPC_URL = "https://testnet.soniclabs.com";
 
+  // ABI completo del contrato
   const CONTRACT_ABI = [
+    {
+      "inputs": [],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
     {
       "anonymous": false,
       "inputs": [
@@ -52,146 +57,239 @@ export default function Home() {
       ],
       "name": "CertificateIssued",
       "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_certificateId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getCertificate",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "issuer",
+          "type": "address"
+        },
+        {
+          "internalType": "string",
+          "name": "recipientName",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "eventName",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "arweaveHash",
+          "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "issueDate",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "isActive",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_certificateId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "verifyCertificate",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "certificateCount",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "_arweaveHash",
+          "type": "string"
+        }
+      ],
+      "name": "verifyCertificateByHash",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "name": "hashToCertificateId",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
     }
   ];
 
-  // Verificar estado de la red al cargar la página
   useEffect(() => {
-    console.log("🚀 Iniciando verificador de certificados...");
-    console.log("📡 Conectando directamente a RPCs públicos (sin MetaMask)");
+    console.log("🚀 Iniciando verificador con Sonic Testnet...");
+    console.log(`📡 RPC: ${SONIC_RPC_URL}`);
+    console.log(`📄 Contrato: ${CONTRACT_ADDRESS}`);
     checkNetworkStatus();
   }, []);
 
   const checkNetworkStatus = async () => {
     setNetworkStatus('checking');
-    console.log("🔍 Probando RPCs de Sonic Testnet...");
-    
-    for (let i = 0; i < SONIC_RPC_URLS.length; i++) {
-      const rpcUrl = SONIC_RPC_URLS[i];
-      console.log(`📡 Probando RPC ${i + 1}/${SONIC_RPC_URLS.length}: ${rpcUrl}`);
-      
-      try {
-        const web3 = new Web3(rpcUrl);
-        const blockNumber = await web3.eth.getBlockNumber();
-        console.log(`✅ RPC CONECTADO: ${rpcUrl}`);
-        console.log(`📦 Último block: ${blockNumber}`);
-        
-        setNetworkStatus('connected');
-        setCurrentRPC(rpcUrl);
-        return;
-      } catch (error) {
-        console.log(`❌ RPC no disponible: ${rpcUrl}`);
-        console.log(`   Error: ${error.message}`);
-        continue;
-      }
-    }
-    
-    console.log("💥 Todos los RPCs fallaron");
-    setNetworkStatus('disconnected');
-    setCurrentRPC('');
-  };
-
-  const getWorkingRPC = async () => {
-    console.log("🔄 Buscando RPC funcionando...");
-    for (const rpcUrl of SONIC_RPC_URLS) {
-      try {
-        const web3 = new Web3(rpcUrl);
-        const blockNumber = await web3.eth.getBlockNumber();
-        console.log(`✅ Usando RPC: ${rpcUrl}`);
-        return web3;
-      } catch (error) {
-        continue;
-      }
-    }
-    throw new Error("No se pudo conectar a Sonic Testnet");
-  };
-
-  const getCertificateFromTransaction = async (web3, transactionHash) => {
-    console.log("🔍 Buscando certificado...");
-    console.log(`📋 Hash: ${transactionHash}`);
+    console.log(`🔍 Conectando a: ${SONIC_RPC_URL}`);
     
     try {
-      console.log("⏳ Obteniendo transacción de la blockchain...");
-      const receipt = await web3.eth.getTransactionReceipt(transactionHash);
+      const web3 = new Web3(SONIC_RPC_URL);
+      const contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
       
-      if (!receipt) {
-        throw new Error("Transacción no encontrada");
-      }
+      // Probar la conexión obteniendo el block number
+      const blockNumber = await web3.eth.getBlockNumber();
+      console.log(`✅ Conectado a Sonic Testnet - Block: ${blockNumber}`);
       
-      console.log("✅ Transacción encontrada en block:", receipt.blockNumber);
-      console.log(`📄 La transacción tiene ${receipt.logs?.length || 0} logs`);
-
-      if (!receipt.logs || receipt.logs.length === 0) {
-        throw new Error("La transacción no contiene logs");
-      }
-
-      const contract = new web3.eth.Contract(CONTRACT_ABI);
-
-      for (let i = 0; i < receipt.logs.length; i++) {
-        const log = receipt.logs[i];
-        console.log(`🔎 Analizando log ${i + 1}...`);
-        
-        try {
-          const decodedLog = contract._decodeEventABI({
-            name: 'CertificateIssued',
-            type: 'event',
-            inputs: CONTRACT_ABI[0].inputs
-          }, log);
-          
-          if (decodedLog) {
-            console.log("🎉 CERTIFICADO ENCONTRADO!");
-            console.log("📊 Datos:", decodedLog.returnValues);
-            
-            return {
-              certificateId: decodedLog.returnValues.certificateId,
-              recipientName: decodedLog.returnValues.recipientName,
-              eventName: decodedLog.returnValues.eventName,
-              issuer: decodedLog.returnValues.issuer,
-              transactionHash: transactionHash,
-              blockNumber: receipt.blockNumber
-            };
-          }
-        } catch (error) {
-          // No es el evento que buscamos, continuar
-          continue;
-        }
-      }
+      // Probar el contrato obteniendo el conteo de certificados
+      const count = await contract.methods.certificateCount().call();
+      console.log(`📊 Contrato accesible - Certificados totales: ${count}`);
       
-      throw new Error("No se encontró el evento CertificateIssued");
+      setNetworkStatus('connected');
+      setCurrentRPC(SONIC_RPC_URL);
       
     } catch (error) {
-      console.error("Error:", error);
-      throw error;
+      console.log(`❌ Error de conexión: ${error.message}`);
+      setNetworkStatus('disconnected');
+      setCurrentRPC('');
     }
   };
 
   const verifyCertificate = async () => {
     if (!searchInput.trim()) {
-      alert("Por favor ingresa el hash de la transacción");
+      alert("Por favor ingresa el ID del certificado o hash Arweave");
       return;
     }
 
     console.log("🚀 INICIANDO VERIFICACIÓN...");
+    console.log(`🔍 Búsqueda: ${searchInput}`);
     
     setLoading(true);
     setResult(null);
 
     try {
       if (networkStatus === 'disconnected') {
-        throw new Error("No hay conexión a Sonic Testnet");
+        throw new Error("No hay conexión a Sonic Testnet. Recarga la página.");
       }
 
-      const web3 = await getWorkingRPC();
-      const certificateData = await getCertificateFromTransaction(web3, searchInput);
+      const web3 = new Web3(SONIC_RPC_URL);
+      const contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
 
-      setResult({
-        isValid: true,
-        certificateData,
-        found: true
-      });
+      let isValid = false;
+      let certificateData = null;
+      let certificateId = null;
+      let searchMethod = '';
+
+      // PRIMERO: Intentar buscar por certificateId
+      if (searchInput.length === 66 && searchInput.startsWith('0x')) {
+        try {
+          searchMethod = 'id';
+          console.log("🔍 Buscando por certificateId...");
+          certificateId = searchInput;
+          isValid = await contract.methods.verifyCertificate(certificateId).call();
+          console.log(`✅ Certificado válido: ${isValid}`);
+          
+          if (isValid) {
+            certificateData = await contract.methods.getCertificate(certificateId).call();
+            console.log("📊 Datos del certificado:", certificateData);
+          }
+        } catch (error) {
+          console.log("❌ Error buscando por ID:", error.message);
+        }
+      }
+
+      // SEGUNDO: Si no se encontró por ID, intentar por hash Arweave
+      if (!certificateData && (searchInput.length === 43 || searchInput.startsWith('_') || searchInput === 'test-456')) {
+        try {
+          searchMethod = 'hash';
+          console.log("🔍 Buscando por hash Arweave...");
+          const result = await contract.methods.verifyCertificateByHash(searchInput).call();
+          isValid = result[0];
+          certificateId = result[1];
+          console.log(`✅ Resultado por hash - Válido: ${isValid}, ID: ${certificateId}`);
+          
+          if (isValid && certificateId !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
+            certificateData = await contract.methods.getCertificate(certificateId).call();
+            console.log("📊 Datos del certificado:", certificateData);
+          }
+        } catch (error) {
+          console.log("❌ Error buscando por hash:", error.message);
+        }
+      }
+
+      if (certificateData) {
+        setResult({
+          isValid: true,
+          certificateData: {
+            ...certificateData,
+            certificateId: certificateId
+          },
+          found: true,
+          searchMethod
+        });
+      } else {
+        throw new Error("No se encontró un certificado válido con los datos proporcionados");
+      }
 
     } catch (error) {
-      console.error("Error:", error);
+      console.error("💥 ERROR:", error);
       setResult({
         isValid: false,
         error: error.message,
@@ -202,11 +300,19 @@ export default function Home() {
     setLoading(false);
   };
 
-  const testExample = {
-    type: "Hash de Transacción",
-    value: "0xd3ed1584d1bf39c7f6e78d6d18b04c6b4b9fc510f6e58d3e918c56b3cf2da819",
-    description: "Certificado de Jesus tincona - Crypto Cocha"
-  };
+  // Ejemplos para probar
+  const testExamples = [
+    {
+      type: "ID del Certificado",
+      value: "0xd6744e56044c09b08b250164f512a6c26aeabbedb46403288e84f0550f122ea1",
+      description: "Certificado de Jesus tincona - Crypto Cocha"
+    },
+    {
+      type: "Hash Arweave", 
+      value: "test-456",
+      description: "Mismo certificado por hash"
+    }
+  ];
 
   return (
     <div className="container">
@@ -214,7 +320,6 @@ export default function Home() {
         <h1>🔍 Verificador de Certificados</h1>
         <p>Verifica certificados en <strong>SONIC TESTNET</strong></p>
         
-        {/* Indicador de Estado de Red */}
         <div className={`network-status ${networkStatus}`}>
           {networkStatus === 'checking' && (
             <div className="status-checking">
@@ -226,8 +331,10 @@ export default function Home() {
             <div className="status-connected">
               <span className="status-dot connected"></span>
               ✅ CONECTADO A SONIC TESTNET
-              <div className="rpc-info">
-                <small>Usando: {currentRPC}</small>
+              <div className="network-info">
+                <small>RPC: {SONIC_RPC_URL}</small>
+                <br />
+                <small>Contrato: {CONTRACT_ADDRESS}</small>
               </div>
             </div>
           )}
@@ -247,7 +354,7 @@ export default function Home() {
         <div className="search-box">
           <input
             type="text"
-            placeholder="Ingresa el hash de la transacción (0x...)"
+            placeholder="Ingresa ID del certificado (0x...) o hash Arweave"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && verifyCertificate()}
@@ -260,23 +367,27 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Ejemplo para probar */}
+        {/* Ejemplos para probar */}
         <div className="examples">
-          <h3>💡 Ejemplo para probar:</h3>
-          <div className="example-card">
-            <p><strong>{testExample.type}:</strong></p>
-            <code>{testExample.value}</code>
-            <p><small>{testExample.description}</small></p>
-            <button 
-              onClick={() => {
-                setSearchInput(testExample.value);
-                setTimeout(verifyCertificate, 100);
-              }}
-              className="example-btn"
-              disabled={networkStatus !== 'connected'}
-            >
-              Probar esta transacción
-            </button>
+          <h3>💡 Ejemplos para probar:</h3>
+          <div className="example-cards">
+            {testExamples.map((example, index) => (
+              <div key={index} className="example-card">
+                <p><strong>{example.type}:</strong></p>
+                <code>{example.value}</code>
+                <p><small>{example.description}</small></p>
+                <button 
+                  onClick={() => {
+                    setSearchInput(example.value);
+                    setTimeout(verifyCertificate, 100);
+                  }}
+                  className="example-btn"
+                  disabled={networkStatus !== 'connected'}
+                >
+                  Probar este
+                </button>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -289,43 +400,43 @@ export default function Home() {
                 <div className="help-text">
                   <p><strong>Solución:</strong></p>
                   <ul>
-                    <li>Verifica que el hash de transacción sea correcto</li>
-                    <li>Asegúrate de que la transacción existe en Sonic Testnet</li>
-                    <li>Revisa la consola (F12) para más detalles</li>
+                    <li>Verifica que el ID o hash sean correctos</li>
+                    <li>Asegúrate de que el certificado existe en el contrato</li>
+                    <li>El certificado podría haber sido revocado</li>
+                    <li>Revisa la consola (F12) para logs detallados</li>
                   </ul>
                 </div>
               </div>
             ) : result.found && result.isValid ? (
               <div>
                 <h3>✅ CERTIFICADO VERIFICADO</h3>
+                <p><small>Búsqueda por: {result.searchMethod === 'hash' ? 'Hash Arweave' : 'ID del Certificado'}</small></p>
                 <div className="certificate-info">
                   <p><strong>👤 Estudiante:</strong> {result.certificateData.recipientName}</p>
                   <p><strong>🎓 Curso/Evento:</strong> {result.certificateData.eventName}</p>
+                  <p><strong>📅 Fecha de Emisión:</strong> {new Date(result.certificateData.issueDate * 1000).toLocaleDateString('es-ES')}</p>
                   <p><strong>🆔 ID del Certificado:</strong></p>
                   <code className="certificate-id">{result.certificateData.certificateId}</code>
+                  <p><strong>📄 Hash Arweave:</strong> {result.certificateData.arweaveHash}</p>
                   <p><strong>🏢 Emitido por:</strong> {result.certificateData.issuer}</p>
-                  <p><strong>📦 Hash de Transacción:</strong></p>
-                  <code>{result.certificateData.transactionHash}</code>
-                  <p><strong>🔗 Block Number:</strong> {result.certificateData.blockNumber}</p>
                   
                   <div className="blockchain-proof">
                     <p>✅ <strong>Verificado en Sonic Testnet</strong></p>
-                    <small>Datos consultados directamente desde la blockchain</small>
+                    <small>Datos consultados directamente desde el contrato inteligente</small>
                   </div>
                 </div>
               </div>
             ) : (
               <div>
                 <h3>❌ CERTIFICADO NO ENCONTRADO</h3>
-                <p>No se pudo encontrar el certificado.</p>
+                <p>No se pudo encontrar un certificado válido.</p>
               </div>
             )}
           </div>
         )}
 
-        {/* Información del Sistema */}
         <div className="system-info">
-          <h3>🔧 Sistema de Verificación</h3>
+          <h3>🔧 Información del Sistema</h3>
           <div className="info-grid">
             <div className="info-item">
               <strong>Red:</strong> Sonic Testnet
@@ -334,26 +445,20 @@ export default function Home() {
               <strong>ChainID:</strong> 146
             </div>
             <div className="info-item">
-              <strong>Conexión:</strong> 
-              <span className={`status ${networkStatus}`}>
-                {networkStatus === 'connected' && ' ✅ Conectado'}
-                {networkStatus === 'disconnected' && ' ❌ Desconectado'}
-                {networkStatus === 'checking' && ' 🔄 Verificando...'}
-              </span>
+              <strong>RPC:</strong> 
+              <code>{SONIC_RPC_URL}</code>
             </div>
             <div className="info-item">
-              <strong>Método:</strong> RPC Público (sin wallet)
+              <strong>Contrato:</strong> 
+              <code>{CONTRACT_ADDRESS.slice(0, 10)}...{CONTRACT_ADDRESS.slice(-8)}</code>
             </div>
-          </div>
-          <div className="note">
-            <p>💡 <strong>Nota:</strong> Este verificador funciona sin MetaMask ni ninguna wallet. Usa RPC público para consultar la blockchain directamente.</p>
           </div>
         </div>
       </main>
 
       <style jsx>{`
         .container {
-          max-width: 700px;
+          max-width: 800px;
           margin: 0 auto;
           padding: 20px;
           font-family: Arial, sans-serif;
@@ -392,6 +497,11 @@ export default function Home() {
           border: 2px solid #ffc107;
           color: #856404;
         }
+        .network-info {
+          margin-top: 10px;
+          font-size: 12px;
+          font-weight: normal;
+        }
         .status-dot {
           display: inline-block;
           width: 12px;
@@ -399,20 +509,11 @@ export default function Home() {
           border-radius: 50%;
           margin-right: 10px;
         }
-        .status-dot.connected {
-          background: #28a745;
-        }
-        .status-dot.disconnected {
-          background: #dc3545;
-        }
-        .status-dot.checking {
-          background: #ffc107;
+        .status-dot.connected { background: #28a745; }
+        .status-dot.disconnected { background: #dc3545; }
+        .status-dot.checking { 
+          background: #ffc107; 
           animation: pulse 1.5s infinite;
-        }
-        .rpc-info {
-          margin-top: 8px;
-          font-size: 12px;
-          font-weight: normal;
         }
         .retry-btn {
           margin-left: 15px;
@@ -462,14 +563,19 @@ export default function Home() {
 
         .examples {
           margin-bottom: 30px;
-          text-align: center;
+        }
+        .example-cards {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+          gap: 15px;
+          margin-top: 15px;
         }
         .example-card {
           background: white;
           padding: 20px;
           border-radius: 10px;
           border: 2px solid #e9ecef;
-          display: inline-block;
+          text-align: center;
         }
         .example-btn {
           background: #6c757d;
@@ -486,12 +592,8 @@ export default function Home() {
           background: white;
           box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
-        .valid {
-          border-left: 5px solid #28a745;
-        }
-        .invalid {
-          border-left: 5px solid #dc3545;
-        }
+        .valid { border-left: 5px solid #28a745; }
+        .invalid { border-left: 5px solid #dc3545; }
         .certificate-info {
           margin-top: 20px;
           line-height: 1.8;
@@ -540,20 +642,6 @@ export default function Home() {
         .info-item {
           padding: 10px;
           background: #f8f9fa;
-          border-radius: 8px;
-        }
-        .status.connected {
-          color: #28a745;
-          font-weight: bold;
-        }
-        .status.disconnected {
-          color: #dc3545;
-          font-weight: bold;
-        }
-        .note {
-          margin-top: 15px;
-          padding: 15px;
-          background: #e7f3ff;
           border-radius: 8px;
         }
       `}</style>
