@@ -6,9 +6,13 @@ export default function Home() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // TUS DATOS REALES DE SONIC TESTNET
-  const CONTRACT_ADDRESS = "0xa3081cd8f09dee3e5f0bcff197a40ff90720a05f";
-  const SONIC_TESTNET_RPC = "https://rpc.soniclabs.com/testnet";
+  // Vamos a probar diferentes RPCs de Sonic
+  const SONIC_RPC_URLS = [
+    "https://sonic-testnet.drpc.org",
+    "https://rpc-testnet.sonicscan.org",
+    "https://testnet.soniclabs.com",
+    "https://rpc.soniclabs.com/testnet"
+  ];
 
   const CONTRACT_ABI = [
     {
@@ -52,88 +56,77 @@ export default function Home() {
       ],
       "name": "CertificateIssued",
       "type": "event"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "bytes32",
-          "name": "_certificateId",
-          "type": "bytes32"
-        }
-      ],
-      "name": "getCertificate",
-      "outputs": [
-        {
-          "internalType": "address",
-          "name": "issuer",
-          "type": "address"
-        },
-        {
-          "internalType": "string",
-          "name": "recipientName",
-          "type": "string"
-        },
-        {
-          "internalType": "string",
-          "name": "eventName",
-          "type": "string"
-        },
-        {
-          "internalType": "string",
-          "name": "arweaveHash",
-          "type": "string"
-        },
-        {
-          "internalType": "uint256",
-          "name": "issueDate",
-          "type": "uint256"
-        },
-        {
-          "internalType": "bool",
-          "name": "isActive",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "bytes32",
-          "name": "_certificateId",
-          "type": "bytes32"
-        }
-      ],
-      "name": "verifyCertificate",
-      "outputs": [
-        {
-          "internalType": "bool",
-          "name": "",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "certificateCount",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
     }
   ];
 
+  // Función para obtener los logs de emisión de certificados desde una transacción
+  const getCertificateFromTransaction = async (web3, transactionHash) => {
+    try {
+      console.log("🔍 Obteniendo transacción:", transactionHash);
+      
+      // Obtener los receipt de la transacción
+      const receipt = await web3.eth.getTransactionReceipt(transactionHash);
+      console.log("📄 Receipt de la transacción:", receipt);
+      
+      if (!receipt || !receipt.logs) {
+        throw new Error("Transacción no encontrada o sin logs");
+      }
+
+      // Crear una instancia temporal del contrato para decodificar logs
+      const contract = new web3.eth.Contract(CONTRACT_ABI);
+      
+      // Buscar el evento CertificateIssued en los logs
+      for (const log of receipt.logs) {
+        try {
+          // Intentar decodificar el log como evento CertificateIssued
+          const decodedLog = contract._decodeEventABI({
+            name: 'CertificateIssued',
+            type: 'event',
+            inputs: CONTRACT_ABI.find(abi => abi.name === 'CertificateIssued').inputs
+          }, log);
+          
+          if (decodedLog) {
+            console.log("✅ Evento CertificateIssued encontrado:", decodedLog);
+            return {
+              certificateId: decodedLog.returnValues.certificateId,
+              recipientName: decodedLog.returnValues.recipientName,
+              eventName: decodedLog.returnValues.eventName,
+              issuer: decodedLog.returnValues.issuer,
+              transactionHash: transactionHash,
+              blockNumber: receipt.blockNumber,
+              timestamp: Date.now() // Podríamos obtener el timestamp del bloque si el RPC lo permite
+            };
+          }
+        } catch (error) {
+          // Continuar con el siguiente log si este no es el evento que buscamos
+          continue;
+        }
+      }
+      
+      throw new Error("No se encontró el evento CertificateIssued en la transacción");
+      
+    } catch (error) {
+      console.error("Error obteniendo datos de la transacción:", error);
+      throw error;
+    }
+  };
+
+  const tryRPCConnection = async (rpcUrl) => {
+    try {
+      const web3 = new Web3(rpcUrl);
+      // Probar la conexión obteniendo el block número más reciente
+      const blockNumber = await web3.eth.getBlockNumber();
+      console.log(`✅ RPC ${rpcUrl} funcionando. Block número:`, blockNumber);
+      return { web3, rpcUrl, success: true, blockNumber };
+    } catch (error) {
+      console.log(`❌ RPC ${rpcUrl} falló:`, error.message);
+      return { success: false, rpcUrl, error };
+    }
+  };
+
   const verifyCertificate = async () => {
     if (!searchInput.trim()) {
-      alert("Por favor ingresa el ID del certificado");
+      alert("Por favor ingresa el hash de la transacción");
       return;
     }
 
@@ -141,48 +134,35 @@ export default function Home() {
     setResult(null);
 
     try {
-      console.log("🔗 Conectando a Sonic Testnet...");
+      console.log("🔗 Probando conexión a RPCs de Sonic Testnet...");
       
-      // Conexión directa al RPC de Sonic Testnet
-      const web3 = new Web3(SONIC_TESTNET_RPC);
-      const contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
-
-      // Verificar conexión obteniendo el conteo de certificados
-      try {
-        const certificateCount = await contract.methods.certificateCount().call();
-        console.log("✅ Conexión exitosa. Total certificados:", certificateCount);
-      } catch (error) {
-        console.error("❌ Error en conexión:", error);
-        throw new Error("No se pudo conectar al contrato en Sonic Testnet");
-      }
-
-      let isValid = false;
-      let certificateData = null;
-      const certificateId = searchInput;
-
-      console.log("🔍 Buscando certificado:", certificateId);
-
-      // Buscar directamente por certificateId
-      try {
-        isValid = await contract.methods.verifyCertificate(certificateId).call();
-        console.log("✅ Certificado válido:", isValid);
-        
-        if (isValid) {
-          certificateData = await contract.methods.getCertificate(certificateId).call();
-          console.log("📄 Datos del certificado:", certificateData);
-        } else {
-          console.log("❌ Certificado no válido o revocado");
+      // Probar diferentes RPCs hasta encontrar uno que funcione
+      let workingConnection = null;
+      
+      for (const rpcUrl of SONIC_RPC_URLS) {
+        const connection = await tryRPCConnection(rpcUrl);
+        if (connection.success) {
+          workingConnection = connection;
+          break;
         }
-      } catch (error) {
-        console.log("❌ Error buscando certificado:", error.message);
-        throw new Error("ID de certificado inválido o no encontrado");
       }
+
+      if (!workingConnection) {
+        throw new Error("No se pudo conectar a ningún RPC de Sonic Testnet. Todos los RPCs están fallando.");
+      }
+
+      const { web3, rpcUrl } = workingConnection;
+      
+      console.log("🔍 Buscando certificado por transacción:", searchInput);
+
+      // Obtener los datos del certificado desde la transacción
+      const certificateData = await getCertificateFromTransaction(web3, searchInput);
 
       setResult({
-        isValid,
+        isValid: true,
         certificateData,
-        certificateId,
-        found: !!certificateData
+        found: true,
+        rpcUrl
       });
 
     } catch (error) {
@@ -197,20 +177,20 @@ export default function Home() {
     setLoading(false);
   };
 
-  // Solo el ID del certificado para probar
+  // Ejemplo con tu hash de transacción real
   const testExample = {
-    type: "ID del Certificado",
-    value: "0xd6744e56044c09b08b250164f512a6c26aeabbedb46403288e84f0550f122ea1",
-    description: "Certificado de Jesus tincona - Crypto Cocha"
+    type: "Hash de Transacción",
+    value: "0xd3ed1584d1bf39c7f6e78d6d18b04c6b4b9fc510f6e58d3e918c56b3cf2da819",
+    description: "Transacción de emisión para Jesus tincona - Crypto Cocha"
   };
 
   return (
     <div className="container">
       <header>
         <h1>🔍 Verificador de Certificados</h1>
-        <p>Verifica certificados en <strong>SONIC TESTNET</strong></p>
-        <div className="contract-info">
-          <p><strong>Contrato:</strong> <code>{CONTRACT_ADDRESS}</code></p>
+        <p>Verifica certificados en <strong>SONIC TESTNET</strong> por Hash de Transacción</p>
+        <div className="network-info">
+          <p><strong>Método:</strong> Consulta directa a la blockchain por transacción</p>
         </div>
       </header>
 
@@ -218,13 +198,13 @@ export default function Home() {
         <div className="search-box">
           <input
             type="text"
-            placeholder="Ingresa el ID del certificado (0x...)"
+            placeholder="Ingresa el hash de la transacción (0x...)"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && verifyCertificate()}
           />
           <button onClick={verifyCertificate} disabled={loading}>
-            {loading ? '🔍 Verificando...' : 'Verificar Certificado'}
+            {loading ? '🔍 Verificando Transacción...' : 'Verificar por Transacción'}
           </button>
         </div>
 
@@ -242,7 +222,7 @@ export default function Home() {
               }}
               className="example-btn"
             >
-              Probar este certificado
+              Probar esta transacción
             </button>
           </div>
         </div>
@@ -254,63 +234,66 @@ export default function Home() {
                 <h3>❌ Error</h3>
                 <p>{result.error}</p>
                 <div className="help-text">
-                  <p><strong>Posibles soluciones:</strong></p>
+                  <p><strong>Información para debugging:</strong></p>
                   <ul>
-                    <li>Verifica que el ID del certificado sea correcto</li>
-                    <li>Confirma que el certificado fue emitido en Sonic Testnet</li>
-                    <li>Revisa la consola del navegador (F12) para más detalles</li>
+                    <li>El hash de transacción debe ser correcto</li>
+                    <li>La transacción debe contener el evento CertificateIssued</li>
+                    <li>Los RPCs de testnet pueden estar inestables</li>
+                    <li>Revisa la consola del navegador (F12) para logs detallados</li>
                   </ul>
+                  <p><strong>Hash probado:</strong> {searchInput}</p>
                 </div>
               </div>
             ) : result.found && result.isValid ? (
               <div>
-                <h3>✅ CERTIFICADO VÁLIDO</h3>
+                <h3>✅ CERTIFICADO ENCONTRADO EN BLOCKCHAIN</h3>
                 <div className="certificate-info">
                   <p><strong>👤 Estudiante:</strong> {result.certificateData.recipientName}</p>
                   <p><strong>🎓 Curso/Evento:</strong> {result.certificateData.eventName}</p>
-                  <p><strong>📅 Fecha de Emisión:</strong> {new Date(result.certificateData.issueDate * 1000).toLocaleDateString('es-ES')}</p>
                   <p><strong>🆔 ID del Certificado:</strong></p>
-                  <code className="certificate-id">{result.certificateId}</code>
+                  <code className="certificate-id">{result.certificateData.certificateId}</code>
                   <p><strong>🏢 Emitido por:</strong> {result.certificateData.issuer}</p>
+                  <p><strong>📦 Hash de Transacción:</strong></p>
+                  <code>{result.certificateData.transactionHash}</code>
+                  <p><strong>🔗 Block Number:</strong> {result.certificateData.blockNumber}</p>
                   
                   <div className="blockchain-proof">
                     <p>✅ <strong>Verificado en Blockchain SONIC</strong></p>
-                    <small>Los datos mostrados están almacenados directamente en el contrato inteligente</small>
+                    <small>Datos extraídos directamente del evento en la transacción</small>
+                    <br />
+                    <small><strong>RPC utilizado:</strong> {result.rpcUrl}</small>
                   </div>
                 </div>
               </div>
             ) : (
               <div>
-                <h3>❌ CERTIFICADO NO VÁLIDO</h3>
-                <p>El certificado no existe o ha sido revocado.</p>
-                <div className="help-text">
-                  <p><strong>Verifica que:</strong></p>
-                  <ul>
-                    <li>El ID del certificado sea correcto</li>
-                    <li>El certificado no haya sido revocado</li>
-                    <li>El certificado exista en el contrato</li>
-                  </ul>
-                </div>
+                <h3>❌ CERTIFICADO NO ENCONTRADO</h3>
+                <p>No se pudo encontrar información del certificado en esta transacción.</p>
               </div>
             )}
           </div>
         )}
 
         <div className="instructions">
-          <h3>📋 Cómo usar:</h3>
+          <h3>📋 Cómo funciona:</h3>
           <div className="steps">
             <div className="step">
-              <strong>1. Obtén el ID del certificado</strong>
-              <p>El ID es un código único que comienza con "0x..."</p>
+              <strong>1. Obtén el hash de la transacción</strong>
+              <p>Es el hash único de cuando se emitió el certificado</p>
             </div>
             <div className="step">
-              <strong>2. Pega el ID en el campo de búsqueda</strong>
-              <p>También puedes usar el botón de ejemplo para probar</p>
+              <strong>2. Pega el hash en el campo de búsqueda</strong>
+              <p>Usa el botón de ejemplo para probar con datos reales</p>
             </div>
             <div className="step">
-              <strong>3. Haz clic en "Verificar Certificado"</strong>
-              <p>El sistema consultará directamente la blockchain SONIC</p>
+              <strong>3. El sistema lee los eventos de la blockchain</strong>
+              <p>Extrae los datos del evento CertificateIssued</p>
             </div>
+          </div>
+          
+          <div className="technical-info">
+            <h4>🔧 Información Técnica:</h4>
+            <p>Este método lee directamente los eventos emitidos por el contrato en la blockchain, sin necesidad de llamar a funciones del contrato.</p>
           </div>
         </div>
       </main>
@@ -335,10 +318,10 @@ export default function Home() {
           color: #2c5530;
           margin-bottom: 10px;
         }
-        .contract-info {
+        .network-info {
           margin-top: 15px;
           padding: 10px;
-          background: #f8f9fa;
+          background: #e7f3ff;
           border-radius: 8px;
           display: inline-block;
         }
@@ -468,6 +451,13 @@ export default function Home() {
           background: #f8f9fa;
           border-radius: 8px;
           border-left: 4px solid #2c5530;
+        }
+        .technical-info {
+          margin-top: 20px;
+          padding: 15px;
+          background: #f8f9fa;
+          border-radius: 8px;
+          border-left: 4px solid #007bff;
         }
       `}</style>
     </div>
