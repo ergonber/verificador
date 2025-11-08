@@ -8,6 +8,8 @@ export default function Home() {
 
   // TUS DATOS REALES DE SONIC
   const CONTRACT_ADDRESS = "0xa3081cd8f09dee3e5f0bcff197a40ff90720a05f";
+  const SONIC_RPC_URL = "https://rpc.soniclabs.com"; // RPC público de SONIC
+  
   const CONTRACT_ABI = [
     {
       "inputs": [],
@@ -49,19 +51,6 @@ export default function Home() {
         }
       ],
       "name": "CertificateIssued",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "string",
-          "name": "eventName",
-          "type": "string"
-        }
-      ],
-      "name": "EventRegistered",
       "type": "event"
     },
     {
@@ -130,93 +119,6 @@ export default function Home() {
     {
       "inputs": [
         {
-          "internalType": "string",
-          "name": "_recipientName",
-          "type": "string"
-        },
-        {
-          "internalType": "string",
-          "name": "_eventName",
-          "type": "string"
-        },
-        {
-          "internalType": "string",
-          "name": "_arweaveHash",
-          "type": "string"
-        }
-      ],
-      "name": "issueCertificate",
-      "outputs": [
-        {
-          "internalType": "bytes32",
-          "name": "",
-          "type": "bytes32"
-        }
-      ],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "owner",
-      "outputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "string",
-          "name": "",
-          "type": "string"
-        }
-      ],
-      "name": "registeredEvents",
-      "outputs": [
-        {
-          "internalType": "bool",
-          "name": "",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "string",
-          "name": "_eventName",
-          "type": "string"
-        }
-      ],
-      "name": "registerEvent",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "bytes32",
-          "name": "_certificateId",
-          "type": "bytes32"
-        }
-      ],
-      "name": "revokeCertificate",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
           "internalType": "bytes32",
           "name": "_certificateId",
           "type": "bytes32"
@@ -256,63 +158,6 @@ export default function Home() {
       ],
       "stateMutability": "view",
       "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "certificateCount",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "bytes32",
-          "name": "",
-          "type": "bytes32"
-        }
-      ],
-      "name": "certificates",
-      "outputs": [
-        {
-          "internalType": "address",
-          "name": "issuer",
-          "type": "address"
-        },
-        {
-          "internalType": "string",
-          "name": "recipientName",
-          "type": "string"
-        },
-        {
-          "internalType": "string",
-          "name": "eventName",
-          "type": "string"
-        },
-        {
-          "internalType": "string",
-          "name": "arweaveHash",
-          "type": "string"
-        },
-        {
-          "internalType": "uint256",
-          "name": "issueDate",
-          "type": "uint256"
-        },
-        {
-          "internalType": "bool",
-          "name": "isActive",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
     }
   ];
 
@@ -326,15 +171,8 @@ export default function Home() {
     setResult(null);
 
     try {
-      if (!window.ethereum) {
-        throw new Error("MetaMask no detectado. Por favor instala MetaMask.");
-      }
-
-      const web3 = new Web3(window.ethereum);
-      
-      // Solicitar conexión a la wallet
-      await window.ethereum.request({ method: 'eth_requestAccounts' });
-      
+      // Conexión directa al RPC de SONIC - SIN necesidad de wallet
+      const web3 = new Web3(SONIC_RPC_URL);
       const contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
 
       let isValid = false;
@@ -387,7 +225,7 @@ export default function Home() {
       console.error("Error:", error);
       setResult({
         isValid: false,
-        error: error.message,
+        error: "Error conectando con la blockchain SONIC. Intenta nuevamente.",
         found: false
       });
     }
@@ -413,9 +251,9 @@ export default function Home() {
     <div className="container">
       <header>
         <h1>🔍 Verificador de Certificados Asoblockchain</h1>
-        <p>Verifica certificados almacenados en la red SONIC</p>
+        <p>Verifica la autenticidad de certificados en la blockchain SONIC</p>
         <div className="contract-info">
-          <p><strong>Contrato:</strong> <code>{CONTRACT_ADDRESS}</code></p>
+          <p><strong>Contrato Verificado:</strong> <code>{CONTRACT_ADDRESS}</code></p>
         </div>
       </header>
 
@@ -429,7 +267,7 @@ export default function Home() {
             onKeyPress={(e) => e.key === 'Enter' && verifyCertificate()}
           />
           <button onClick={verifyCertificate} disabled={loading}>
-            {loading ? '🔍 Verificando en SONIC...' : 'Verificar en Blockchain'}
+            {loading ? '🔍 Verificando...' : 'Verificar Certificado'}
           </button>
         </div>
 
@@ -462,18 +300,10 @@ export default function Home() {
               <div>
                 <h3>❌ Error de Conexión</h3>
                 <p>{result.error}</p>
-                <div className="help-text">
-                  <p><strong>Solución:</strong></p>
-                  <ul>
-                    <li>Asegúrate de tener MetaMask instalado</li>
-                    <li>Conecta tu wallet a la red SONIC (ChainId: 146)</li>
-                    <li>Acepta la conexión cuando MetaMask lo solicite</li>
-                  </ul>
-                </div>
               </div>
             ) : result.found && result.isValid ? (
               <div>
-                <h3>✅ CERTIFICADO VÁLIDO EN BLOCKCHAIN</h3>
+                <h3>✅ CERTIFICADO VÁLIDO</h3>
                 <p><small>Búsqueda por: {result.searchMethod === 'hash' ? 'Hash Arweave' : 'ID del Certificado'}</small></p>
                 <div className="certificate-info">
                   <p><strong>👤 Nombre del Estudiante:</strong> {result.certificateData.recipientName}</p>
@@ -487,7 +317,7 @@ export default function Home() {
                   
                   <div className="blockchain-proof">
                     <p>✅ <strong>Verificado en Blockchain SONIC</strong></p>
-                    <small>Todos los datos mostrados están almacenados directamente en el contrato inteligente</small>
+                    <small>Datos consultados directamente desde el contrato inteligente</small>
                   </div>
                 </div>
               </div>
@@ -496,12 +326,11 @@ export default function Home() {
                 <h3>❌ CERTIFICADO NO ENCONTRADO</h3>
                 <p>No se encontró un certificado válido en la blockchain SONIC.</p>
                 <div className="help-text">
-                  <p><strong>Posibles causas:</strong></p>
+                  <p><strong>Verifica que:</strong></p>
                   <ul>
-                    <li>El ID o hash es incorrecto</li>
-                    <li>El certificado fue revocado</li>
-                    <li>El certificado no ha sido emitido aún</li>
-                    <li>Estás en una red blockchain incorrecta (debe ser SONIC)</li>
+                    <li>El ID o hash sea correcto</li>
+                    <li>El certificado no haya sido revocado</li>
+                    <li>El certificado exista en el contrato</li>
                   </ul>
                 </div>
               </div>
@@ -510,20 +339,23 @@ export default function Home() {
         )}
 
         <div className="instructions">
-          <h3>¿Cómo verificar?</h3>
+          <h3>¿Cómo funciona?</h3>
           <div className="steps">
             <div className="step">
-              <strong>1. Conecta MetaMask a SONIC</strong>
-              <p>ChainId: 146, RPC: https://rpc.soniclabs.com</p>
-            </div>
-            <div className="step">
-              <strong>2. Ingresa los datos</strong>
+              <strong>1. Ingresa los datos</strong>
               <p>Pega el <code>ID del certificado</code> o el <code>hash Arweave</code></p>
             </div>
             <div className="step">
-              <strong>3. Verificación automática</strong>
+              <strong>2. Consulta automática</strong>
               <p>El sistema consulta directamente el contrato en SONIC</p>
             </div>
+            <div className="step">
+              <strong>3. Resultado instantáneo</strong>
+              <p>Muestra los datos almacenados en la blockchain</p>
+            </div>
+          </div>
+          <div className="note">
+            <p>💡 <strong>Nota:</strong> No se requiere conexión de wallet. Solo lectura pública de la blockchain.</p>
           </div>
         </div>
       </main>
@@ -684,6 +516,13 @@ export default function Home() {
           background: #f8f9fa;
           border-radius: 10px;
           border-left: 4px solid #2c5530;
+        }
+        .note {
+          margin-top: 20px;
+          padding: 15px;
+          background: #e7f3ff;
+          border-radius: 8px;
+          border-left: 4px solid #007bff;
         }
       `}</style>
     </div>
