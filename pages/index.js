@@ -2,30 +2,17 @@ import { useState, useEffect } from 'react';
 import Web3 from 'web3';
 
 export default function Home() {
-  const [searchInput, setSearchInput] = useState('');
   const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [networkStatus, setNetworkStatus] = useState('checking');
-  const [currentRPC, setCurrentRPC] = useState('');
 
-  // CONTRATO en Sonic Testnet - TU CONTRATO REAL
+  // CONFIGURACIÓN QUEMADA EN CÓDIGO
   const CONTRACT_ADDRESS = "0xa3081cd8f09dee3e5f0bcff197a40ff90720a05f";
-  
-  // CONFIGURACIÓN EXACTA de Sonic Testnet
   const SONIC_RPC_URL = "https://rpc.testnet.soniclabs.com";
-  const SONIC_NETWORK = {
-    chainId: "0x3911", // 14601 en hexadecimal
-    chainName: "Sonic Testnet",
-    rpcUrls: [SONIC_RPC_URL],
-    blockExplorerUrls: ["https://testnet.sonicscan.org"],
-    nativeCurrency: {
-      name: "Sonic",
-      symbol: "S",
-      decimals: 18
-    }
-  };
+  
+  // CERTIFICATE_ID quemado - este es el ID que se generó en tu transacción
+  const CERTIFICATE_ID = "0xd6744e56044c09b08b250164f512a6c26aeabbedb46403288e84f0550f122ea1";
 
-  // ABI simplificado - solo las funciones que necesitamos
   const CONTRACT_ABI = [
     {
       "inputs": [
@@ -89,87 +76,44 @@ export default function Home() {
       ],
       "stateMutability": "view",
       "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "certificateCount",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
     }
   ];
 
   useEffect(() => {
-    console.log("🚀 Iniciando verificador de certificados...");
-    console.log("🔧 Configuración Sonic Testnet:");
+    console.log("🚀 INICIANDO VERIFICACIÓN AUTOMÁTICA");
+    console.log("🔧 Configuración:");
     console.log("   RPC:", SONIC_RPC_URL);
-    console.log("   ChainID:", SONIC_NETWORK.chainId);
     console.log("   Contrato:", CONTRACT_ADDRESS);
-    checkNetworkStatus();
+    console.log("   CertificateId:", CERTIFICATE_ID);
+    
+    verifyCertificate();
   }, []);
 
-  const checkNetworkStatus = async () => {
-    setNetworkStatus('checking');
-    console.log(`🔍 Conectando a Sonic Testnet...`);
-    
-    try {
-      const web3 = new Web3(SONIC_RPC_URL);
-      
-      // Probar la conexión obteniendo el block number
-      const blockNumber = await web3.eth.getBlockNumber();
-      console.log(`✅ CONEXIÓN EXITOSA - Block: ${blockNumber}`);
-      
-      // Probar el contrato
-      const contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
-      const certificateCount = await contract.methods.certificateCount().call();
-      console.log(`📊 Certificados en contrato: ${certificateCount}`);
-      
-      setNetworkStatus('connected');
-      setCurrentRPC(SONIC_RPC_URL);
-      
-    } catch (error) {
-      console.log(`❌ ERROR DE CONEXIÓN: ${error.message}`);
-      setNetworkStatus('disconnected');
-      setCurrentRPC('');
+  const convertBigIntToNumber = (bigIntValue) => {
+    if (typeof bigIntValue === 'bigint') {
+      return Number(bigIntValue);
     }
+    return Number(bigIntValue);
   };
 
   const verifyCertificate = async () => {
-    if (!searchInput.trim()) {
-      alert("Por favor ingresa el ID del certificado");
-      return;
-    }
-
-    // Validar formato de certificateId
-    if (searchInput.length !== 66 || !searchInput.startsWith('0x')) {
-      alert("El ID del certificado debe tener 66 caracteres y comenzar con '0x'");
-      return;
-    }
-
-    console.log("🚀 INICIANDO VERIFICACIÓN...");
-    console.log(`🔍 CertificateId: ${searchInput}`);
-    
     setLoading(true);
-    setResult(null);
+    setNetworkStatus('checking');
 
     try {
-      if (networkStatus === 'disconnected') {
-        throw new Error("No hay conexión a Sonic Testnet. Recarga la página.");
-      }
-
+      console.log("🔍 Conectando a Sonic Testnet...");
       const web3 = new Web3(SONIC_RPC_URL);
       const contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
 
-      console.log("🔍 Verificando validez del certificado...");
+      // Probar conexión
+      const blockNumber = await web3.eth.getBlockNumber();
+      console.log(`✅ Conectado - Block: ${blockNumber}`);
+      setNetworkStatus('connected');
+
+      console.log("🔍 Verificando certificado...");
       
-      // 1. Primero verificar si el certificado es válido
-      const isValid = await contract.methods.verifyCertificate(searchInput).call();
+      // 1. Verificar si el certificado es válido
+      const isValid = await contract.methods.verifyCertificate(CERTIFICATE_ID).call();
       console.log(`✅ Certificado válido: ${isValid}`);
 
       if (!isValid) {
@@ -179,20 +123,29 @@ export default function Home() {
       console.log("📋 Obteniendo datos del certificado...");
       
       // 2. Obtener todos los datos del certificado
-      const certificateData = await contract.methods.getCertificate(searchInput).call();
-      console.log("📊 Datos obtenidos:", certificateData);
+      const rawData = await contract.methods.getCertificate(CERTIFICATE_ID).call();
+      console.log("📊 Datos obtenidos:", rawData);
+
+      // Procesar datos
+      const certificateData = {
+        issuer: rawData.issuer,
+        recipientName: rawData.recipientName,
+        eventName: rawData.eventName,
+        arweaveHash: rawData.arweaveHash,
+        issueDate: convertBigIntToNumber(rawData.issueDate),
+        isActive: rawData.isActive,
+        certificateId: CERTIFICATE_ID
+      };
 
       setResult({
         isValid: true,
-        certificateData: {
-          ...certificateData,
-          certificateId: searchInput
-        },
+        certificateData: certificateData,
         found: true
       });
 
     } catch (error) {
       console.error("💥 ERROR:", error);
+      setNetworkStatus('disconnected');
       setResult({
         isValid: false,
         error: error.message,
@@ -203,18 +156,16 @@ export default function Home() {
     setLoading(false);
   };
 
-  // Ejemplo con el CERTIFICATE_ID real de tu contrato
-  const testExample = {
-    type: "ID del Certificado",
-    value: "0xd6744e56044c09b08b250164f512a6c26aeabbedb46403288e84f0550f122ea1",
-    description: "Certificado de Jesus tincona - Crypto Cocha"
+  const retryVerification = () => {
+    setResult(null);
+    verifyCertificate();
   };
 
   return (
     <div className="container">
       <header>
-        <h1>🔍 Verificador de Certificados</h1>
-        <p>Verifica certificados en <strong>SONIC TESTNET</strong></p>
+        <h1>✅ Verificador de Certificados</h1>
+        <p>Verificación automática en <strong>SONIC TESTNET</strong></p>
         
         <div className={`network-status ${networkStatus}`}>
           {networkStatus === 'checking' && (
@@ -227,134 +178,122 @@ export default function Home() {
             <div className="status-connected">
               <span className="status-dot connected"></span>
               ✅ CONECTADO A SONIC TESTNET
-              <div className="network-details">
-                <p><strong>ChainID:</strong> {SONIC_NETWORK.chainId} (14601)</p>
-                <p><strong>RPC:</strong> {SONIC_RPC_URL}</p>
-                <p><strong>Contrato:</strong> {CONTRACT_ADDRESS}</p>
-              </div>
             </div>
           )}
           {networkStatus === 'disconnected' && (
             <div className="status-disconnected">
               <span className="status-dot disconnected"></span>
-              ❌ DESCONECTADO DE SONIC TESTNET
-              <div className="retry-section">
-                <p>No se pudo conectar al RPC de Sonic Testnet</p>
-                <button onClick={checkNetworkStatus} className="retry-btn">
-                  Reintentar Conexión
-                </button>
-              </div>
+              ❌ ERROR DE CONEXIÓN
             </div>
           )}
         </div>
       </header>
 
       <main>
-        <div className="search-box">
-          <input
-            type="text"
-            placeholder="Ingresa el ID del certificado (0x...)"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && verifyCertificate()}
-          />
-          <button 
-            onClick={verifyCertificate} 
-            disabled={loading || networkStatus !== 'connected'}
-          >
-            {loading ? '🔍 Verificando...' : 'Verificar Certificado'}
-          </button>
-        </div>
-
-        {/* Ejemplo con certificateId real */}
-        <div className="examples">
-          <h3>💡 Ejemplo para probar (certificado real):</h3>
-          <div className="example-card">
-            <p><strong>{testExample.type}:</strong></p>
-            <code>{testExample.value}</code>
-            <p><small>{testExample.description}</small></p>
-            <button 
-              onClick={() => {
-                setSearchInput(testExample.value);
-                setTimeout(verifyCertificate, 100);
-              }}
-              className="example-btn"
-              disabled={networkStatus !== 'connected'}
-            >
-              Probar este certificado
-            </button>
+        {loading ? (
+          <div className="loading">
+            <div className="spinner"></div>
+            <p>Verificando certificado en blockchain...</p>
           </div>
-        </div>
-
-        {result && (
-          <div className={`result ${result.isValid ? 'valid' : 'invalid'}`}>
-            {result.error ? (
-              <div>
-                <h3>❌ Error en la Verificación</h3>
-                <p>{result.error}</p>
-                <div className="help-text">
-                  <p><strong>Para solucionar:</strong></p>
-                  <ul>
-                    <li>Verifica que el ID del certificado sea correcto</li>
-                    <li>Asegúrate de que el certificado existe en el contrato</li>
-                    <li>Confirma que el contrato está en Sonic Testnet</li>
-                    <li>Revisa la consola (F12) para más detalles</li>
-                  </ul>
-                  <p><strong>ID probado:</strong> <code>{searchInput}</code></p>
-                </div>
+        ) : result && result.found && result.isValid ? (
+          <div className="result valid">
+            <div className="success-header">
+              <h2>🎉 CERTIFICADO VERIFICADO EXITOSAMENTE</h2>
+              <p>El certificado existe y es válido en Sonic Testnet</p>
+            </div>
+            
+            <div className="certificate-card">
+              <div className="certificate-header">
+                <h3>📜 Certificado Digital</h3>
+                <div className="status-badge valid">✅ VÁLIDO</div>
               </div>
-            ) : result.found && result.isValid ? (
-              <div>
-                <h3>✅ CERTIFICADO VERIFICADO</h3>
-                <div className="certificate-info">
-                  <p><strong>👤 Estudiante:</strong> {result.certificateData.recipientName}</p>
-                  <p><strong>🎓 Curso/Evento:</strong> {result.certificateData.eventName}</p>
-                  <p><strong>📅 Fecha de Emisión:</strong> {new Date(result.certificateData.issueDate * 1000).toLocaleDateString('es-ES')}</p>
-                  <p><strong>🆔 ID del Certificado:</strong></p>
+              
+              <div className="certificate-details">
+                <div className="detail-row">
+                  <strong>👤 Estudiante:</strong>
+                  <span>{result.certificateData.recipientName}</span>
+                </div>
+                
+                <div className="detail-row">
+                  <strong>🎓 Curso/Evento:</strong>
+                  <span>{result.certificateData.eventName}</span>
+                </div>
+                
+                <div className="detail-row">
+                  <strong>📅 Fecha de Emisión:</strong>
+                  <span>{new Date(result.certificateData.issueDate * 1000).toLocaleDateString('es-ES')}</span>
+                </div>
+                
+                <div className="detail-row">
+                  <strong>✅ Estado:</strong>
+                  <span className="status-active">ACTIVO</span>
+                </div>
+                
+                <div className="detail-row">
+                  <strong>🏢 Emitido por:</strong>
+                  <span>{result.certificateData.issuer}</span>
+                </div>
+                
+                <div className="detail-row">
+                  <strong>🆔 ID del Certificado:</strong>
                   <code className="certificate-id">{result.certificateData.certificateId}</code>
-                  <p><strong>✅ Estado:</strong> {result.certificateData.isActive ? "Activo" : "Revocado"}</p>
-                  <p><strong>🏢 Emitido por:</strong> {result.certificateData.issuer}</p>
-                  
-                  <div className="blockchain-proof">
-                    <p>✅ <strong>Verificado en Sonic Testnet</strong></p>
-                    <small>Datos consultados directamente desde el contrato inteligente</small>
-                    <br />
-                    <small>ChainID: {SONIC_NETWORK.chainId} | RPC: {SONIC_RPC_URL}</small>
-                  </div>
                 </div>
               </div>
-            ) : (
-              <div>
-                <h3>❌ CERTIFICADO NO ENCONTRADO</h3>
-                <p>No se pudo verificar el certificado con el ID proporcionado.</p>
+              
+              <div className="blockchain-proof">
+                <div className="proof-header">
+                  <strong>🔗 Verificado en Blockchain</strong>
+                </div>
+                <div className="proof-details">
+                  <p><strong>Red:</strong> Sonic Testnet (ChainID: 14601)</p>
+                  <p><strong>Contrato:</strong> {CONTRACT_ADDRESS}</p>
+                  <p><strong>Transacción:</strong> 0xd3ed1584d1bf39c7f6e78d6d18b04c6b4b9fc510f6e58d3e918c56b3cf2da819</p>
+                </div>
               </div>
-            )}
+            </div>
           </div>
-        )}
+        ) : result && result.error ? (
+          <div className="result invalid">
+            <div className="error-header">
+              <h2>❌ ERROR EN LA VERIFICACIÓN</h2>
+              <p>{result.error}</p>
+            </div>
+            
+            <div className="error-details">
+              <div className="help-text">
+                <p><strong>Información para debugging:</strong></p>
+                <ul>
+                  <li><strong>CertificateId probado:</strong> {CERTIFICATE_ID}</li>
+                  <li><strong>Contrato:</strong> {CONTRACT_ADDRESS}</li>
+                  <li><strong>RPC:</strong> {SONIC_RPC_URL}</li>
+                  <li><strong>Estado de red:</strong> {networkStatus}</li>
+                </ul>
+              </div>
+              
+              <button onClick={retryVerification} className="retry-btn">
+                🔄 Reintentar Verificación
+              </button>
+            </div>
+          </div>
+        ) : null}
 
-        <div className="instructions">
-          <h3>📋 Cómo usar el verificador:</h3>
-          <div className="steps">
-            <div className="step">
-              <strong>1. Obtén el ID del certificado</strong>
-              <p>El ID es un código único de 66 caracteres que comienza con "0x"</p>
+        <div className="system-info">
+          <h3>🔧 Información del Sistema</h3>
+          <div className="info-grid">
+            <div className="info-item">
+              <strong>Red Blockchain:</strong> Sonic Testnet
             </div>
-            <div className="step">
-              <strong>2. Pega el ID en el campo de búsqueda</strong>
-              <p>Usa el ejemplo proporcionado para probar</p>
+            <div className="info-item">
+              <strong>ChainID:</strong> 14601
             </div>
-            <div className="step">
-              <strong>3. Haz clic en "Verificar Certificado"</strong>
-              <p>El sistema consultará directamente la blockchain Sonic Testnet</p>
+            <div className="info-item">
+              <strong>Contrato:</strong> 
+              <code>{CONTRACT_ADDRESS.slice(0, 10)}...{CONTRACT_ADDRESS.slice(-8)}</code>
             </div>
-          </div>
-          
-          <div className="technical-info">
-            <h4>🔧 Información Técnica:</h4>
-            <p><strong>Método:</strong> Consulta directa al contrato inteligente</p>
-            <p><strong>Función:</strong> verifyCertificate() + getCertificate()</p>
-            <p><strong>Blockchain:</strong> Sonic Testnet (ChainID: 14601)</p>
-            <p><strong>Contrato:</strong> {CONTRACT_ADDRESS}</p>
+            <div className="info-item">
+              <strong>CertificateId:</strong>
+              <code>{CERTIFICATE_ID.slice(0, 20)}...</code>
+            </div>
           </div>
         </div>
       </main>
@@ -365,7 +304,9 @@ export default function Home() {
           margin: 0 auto;
           padding: 20px;
           font-family: Arial, sans-serif;
+          min-height: 100vh;
         }
+        
         header {
           text-align: center;
           margin-bottom: 40px;
@@ -374,6 +315,7 @@ export default function Home() {
           border-radius: 15px;
           box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
+        
         h1 {
           color: #2c5530;
           margin-bottom: 10px;
@@ -381,189 +323,232 @@ export default function Home() {
         
         .network-status {
           margin-top: 20px;
-          padding: 20px;
+          padding: 15px;
           border-radius: 10px;
+          font-weight: bold;
         }
+        
         .network-status.connected {
           background: #d4edda;
           border: 2px solid #28a745;
           color: #155724;
         }
+        
         .network-status.disconnected {
           background: #f8d7da;
           border: 2px solid #dc3545;
           color: #721c24;
         }
+        
         .network-status.checking {
           background: #fff3cd;
           border: 2px solid #ffc107;
           color: #856404;
         }
-        .network-details {
-          margin-top: 10px;
-          font-size: 14px;
-          text-align: left;
-          background: rgba(255,255,255,0.7);
-          padding: 15px;
-          border-radius: 8px;
-        }
-        .retry-section {
-          margin-top: 10px;
-        }
+        
         .status-dot {
           display: inline-block;
-          width: 12px;
-          height: 12px;
+          width: 10px;
+          height: 10px;
           border-radius: 50%;
           margin-right: 10px;
         }
+        
         .status-dot.connected { background: #28a745; }
         .status-dot.disconnected { background: #dc3545; }
         .status-dot.checking { 
           background: #ffc107; 
           animation: pulse 1.5s infinite;
         }
+        
+        .loading {
+          text-align: center;
+          padding: 60px 20px;
+        }
+        
+        .spinner {
+          border: 4px solid #f3f3f3;
+          border-top: 4px solid #2c5530;
+          border-radius: 50%;
+          width: 50px;
+          height: 50px;
+          animation: spin 1s linear infinite;
+          margin: 0 auto 20px;
+        }
+        
+        .result {
+          padding: 0;
+          border-radius: 15px;
+          margin-bottom: 30px;
+          background: white;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+          overflow: hidden;
+        }
+        
+        .result.valid {
+          border: 2px solid #28a745;
+        }
+        
+        .result.invalid {
+          border: 2px solid #dc3545;
+        }
+        
+        .success-header, .error-header {
+          padding: 30px;
+          text-align: center;
+        }
+        
+        .success-header {
+          background: linear-gradient(135deg, #28a745, #20c997);
+          color: white;
+        }
+        
+        .error-header {
+          background: linear-gradient(135deg, #dc3545, #e83e8c);
+          color: white;
+        }
+        
+        .certificate-card {
+          padding: 30px;
+        }
+        
+        .certificate-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 25px;
+          padding-bottom: 15px;
+          border-bottom: 2px solid #e9ecef;
+        }
+        
+        .status-badge {
+          padding: 8px 16px;
+          border-radius: 20px;
+          font-weight: bold;
+          font-size: 14px;
+        }
+        
+        .status-badge.valid {
+          background: #d4edda;
+          color: #155724;
+          border: 1px solid #c3e6cb;
+        }
+        
+        .certificate-details {
+          margin-bottom: 25px;
+        }
+        
+        .detail-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          padding: 12px 0;
+          border-bottom: 1px solid #f8f9fa;
+        }
+        
+        .detail-row strong {
+          color: #495057;
+          min-width: 150px;
+        }
+        
+        .status-active {
+          color: #28a745;
+          font-weight: bold;
+        }
+        
+        .certificate-id {
+          background: #f8f9fa;
+          padding: 8px 12px;
+          border-radius: 6px;
+          font-size: 12px;
+          word-break: break-all;
+          display: block;
+          margin-top: 5px;
+        }
+        
+        .blockchain-proof {
+          background: #f8f9fa;
+          padding: 20px;
+          border-radius: 10px;
+          border-left: 4px solid #007bff;
+        }
+        
+        .proof-header {
+          margin-bottom: 15px;
+          color: #007bff;
+        }
+        
+        .error-details {
+          padding: 30px;
+        }
+        
+        .help-text {
+          background: #fff3cd;
+          padding: 20px;
+          border-radius: 8px;
+          margin-bottom: 20px;
+          border-left: 4px solid #ffc107;
+        }
+        
+        .help-text ul {
+          margin: 10px 0;
+          padding-left: 20px;
+        }
+        
         .retry-btn {
-          margin-top: 10px;
-          padding: 8px 15px;
+          width: 100%;
+          padding: 15px;
           background: #dc3545;
           color: white;
           border: none;
-          border-radius: 5px;
+          border-radius: 8px;
+          font-size: 16px;
+          font-weight: bold;
           cursor: pointer;
+        }
+        
+        .retry-btn:hover {
+          background: #c82333;
+        }
+        
+        .system-info {
+          background: white;
+          padding: 25px;
+          border-radius: 15px;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .info-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 15px;
+          margin-top: 15px;
+        }
+        
+        .info-item {
+          padding: 12px;
+          background: #f8f9fa;
+          border-radius: 8px;
+          border: 1px solid #e9ecef;
+        }
+        
+        code {
+          background: #e9ecef;
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 12px;
+          word-break: break-all;
+        }
+        
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
         }
         
         @keyframes pulse {
           0% { opacity: 1; }
           50% { opacity: 0.5; }
           100% { opacity: 1; }
-        }
-
-        .search-box {
-          display: flex;
-          gap: 10px;
-          margin-bottom: 30px;
-        }
-        input {
-          flex: 1;
-          padding: 15px;
-          border: 2px solid #ddd;
-          border-radius: 10px;
-          font-size: 16px;
-        }
-        input:focus {
-          outline: none;
-          border-color: #2c5530;
-        }
-        button {
-          padding: 15px 25px;
-          background: #2c5530;
-          color: white;
-          border: none;
-          border-radius: 10px;
-          cursor: pointer;
-          font-size: 16px;
-          font-weight: bold;
-        }
-        button:hover:not(:disabled) {
-          background: #1e3a24;
-        }
-        button:disabled {
-          background: #ccc;
-          cursor: not-allowed;
-        }
-
-        .examples {
-          margin-bottom: 30px;
-          text-align: center;
-        }
-        .example-card {
-          background: white;
-          padding: 20px;
-          border-radius: 10px;
-          border: 2px solid #e9ecef;
-          display: inline-block;
-        }
-        .example-btn {
-          background: #6c757d;
-          padding: 10px 20px;
-          font-size: 14px;
-          margin-top: 10px;
-          color: white;
-        }
-
-        .result {
-          padding: 25px;
-          border-radius: 15px;
-          margin-bottom: 30px;
-          background: white;
-          box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        .valid { border-left: 5px solid #28a745; }
-        .invalid { border-left: 5px solid #dc3545; }
-        .certificate-info {
-          margin-top: 20px;
-          line-height: 1.8;
-        }
-        .certificate-id {
-          display: block;
-          background: #f8f9fa;
-          padding: 12px;
-          border-radius: 8px;
-          margin: 8px 0;
-          font-size: 14px;
-          word-break: break-all;
-          border: 1px solid #dee2e6;
-        }
-        code {
-          background: #f8f9fa;
-          padding: 8px 12px;
-          border-radius: 6px;
-          font-size: 14px;
-          word-break: break-all;
-        }
-        .blockchain-proof {
-          margin-top: 20px;
-          padding: 15px;
-          background: #d4edda;
-          border-radius: 8px;
-          border-left: 4px solid #28a745;
-        }
-        .help-text {
-          margin-top: 15px;
-          padding: 15px;
-          background: #fff3cd;
-          border-radius: 8px;
-          border-left: 4px solid #ffc107;
-        }
-        .help-text ul {
-          margin: 10px 0;
-          padding-left: 20px;
-        }
-
-        .instructions {
-          background: white;
-          padding: 25px;
-          border-radius: 15px;
-          box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        .steps {
-          display: grid;
-          gap: 15px;
-          margin-top: 15px;
-        }
-        .step {
-          padding: 15px;
-          background: #f8f9fa;
-          border-radius: 8px;
-          border-left: 4px solid #2c5530;
-        }
-        .technical-info {
-          margin-top: 20px;
-          padding: 15px;
-          background: #e7f3ff;
-          border-radius: 8px;
-          border-left: 4px solid #007bff;
         }
       `}</style>
     </div>
