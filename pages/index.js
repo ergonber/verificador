@@ -11,7 +11,7 @@ export default function Home() {
   const SONIC_RPC_URL = "https://rpc.testnet.soniclabs.com";
   
   // CERTIFICATE_ID quemado - este es el ID que se generó en tu transacción
-  const CERTIFICATE_ID = "0xf47444960241d3ae46ed20d44b143fb812e73a53b7796bd162c22071f906ae14";
+  const CERTIFICATE_ID = "0x230b0aadbd10f4c4ecce55b5151812554eccf70145e733fb916fe18ca802e97a";
 
   const CONTRACT_ABI = [
     {
