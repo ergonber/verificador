@@ -2,17 +2,17 @@ import { useState, useEffect } from 'react';
 import Web3 from 'web3';
 
 export default function Home() {
-  const [certificateId, setCertificateId] = useState('');
+  const [transactionHash, setTransactionHash] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [networkStatus, setNetworkStatus] = useState('checking');
 
-  // CONFIGURACIÓN QUEMADA EN CÓDIGO
+  // CONFIGURACIÓN
   const CONTRACT_ADDRESS = "0xAe48Ed8cD53e6e595E857872b1ac338E17F08549";
   const SONIC_RPC_URL = "https://rpc.testnet.soniclabs.com";
   
-  // CERTIFICATE_ID de ejemplo (el de Jesus tincona)
-  const EXAMPLE_CERTIFICATE_ID = "0xd6744e56044c09b08b250164f512a6c26aeabbedb46403288e84f0550f122ea1";
+  // TRANSACTION HASH de ejemplo
+  const EXAMPLE_TRANSACTION_HASH = "0x8e20e6d10a35ad6070d5390bb65864ea79de1371c8f067820256f86d0e873dfc";
 
   const CONTRACT_ABI = [
     {
@@ -110,20 +110,20 @@ export default function Home() {
     return Number(bigIntValue);
   };
 
-  const verifyCertificate = async (idToVerify = certificateId) => {
-    if (!idToVerify.trim()) {
-      alert("Por favor ingresa el ID del certificado");
+  const findCertificateByTransactionHash = async (hashToSearch = transactionHash) => {
+    if (!hashToSearch.trim()) {
+      alert("Por favor ingresa el hash de la transacción");
       return;
     }
 
-    // Validar formato de certificateId
-    if (idToVerify.length !== 66 || !idToVerify.startsWith('0x')) {
-      alert("El ID del certificado debe tener 66 caracteres y comenzar con '0x'");
+    // Validar formato de transaction hash
+    if (hashToSearch.length !== 66 || !hashToSearch.startsWith('0x')) {
+      alert("El hash de transacción debe tener 66 caracteres y comenzar con '0x'");
       return;
     }
 
-    console.log("🚀 INICIANDO VERIFICACIÓN...");
-    console.log(`🔍 CertificateId: ${idToVerify}`);
+    console.log("🚀 BUSCANDO CERTIFICADO POR TRANSACTION HASH...");
+    console.log(`🔍 Transaction Hash: ${hashToSearch}`);
     
     setLoading(true);
     setResult(null);
@@ -136,10 +136,50 @@ export default function Home() {
       const web3 = new Web3(SONIC_RPC_URL);
       const contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
 
-      console.log("🔍 Verificando validez del certificado...");
+      console.log("📄 Obteniendo receipt de la transacción...");
       
-      // 1. Verificar si el certificado es válido
-      const isValid = await contract.methods.verifyCertificate(idToVerify).call();
+      // 1. Obtener el receipt de la transacción
+      const transactionReceipt = await web3.eth.getTransactionReceipt(hashToSearch);
+      console.log("📋 Transaction receipt:", transactionReceipt);
+
+      if (!transactionReceipt) {
+        throw new Error("Transacción no encontrada");
+      }
+
+      if (!transactionReceipt.logs || transactionReceipt.logs.length === 0) {
+        throw new Error("No se encontraron logs en la transacción");
+      }
+
+      // 2. Buscar el certificateId en los logs
+      let certificateId = null;
+      
+      console.log("📋 Logs encontrados:", transactionReceipt.logs.length);
+      
+      for (let i = 0; i < transactionReceipt.logs.length; i++) {
+        const log = transactionReceipt.logs[i];
+        console.log(`🔍 Log ${i}:`, log);
+        
+        // Si el log es del contrato de certificados
+        if (log.address.toLowerCase() === CONTRACT_ADDRESS.toLowerCase()) {
+          console.log("🎯 Log del contrato de certificados encontrado");
+          
+          // El certificateId está en el segundo topic (índice 1)
+          if (log.topics && log.topics.length > 1) {
+            certificateId = log.topics[1];
+            console.log("🎯 CertificateId encontrado en topics:", certificateId);
+            break;
+          }
+        }
+      }
+
+      if (!certificateId) {
+        throw new Error("No se pudo encontrar el certificateId en los logs de la transacción");
+      }
+
+      console.log("🔍 Verificando certificado con ID:", certificateId);
+      
+      // 3. Verificar si el certificado es válido
+      const isValid = await contract.methods.verifyCertificate(certificateId).call();
       console.log(`✅ Certificado válido: ${isValid}`);
 
       if (!isValid) {
@@ -148,8 +188,8 @@ export default function Home() {
 
       console.log("📋 Obteniendo datos del certificado...");
       
-      // 2. Obtener todos los datos del certificado
-      const rawData = await contract.methods.getCertificate(idToVerify).call();
+      // 4. Obtener todos los datos del certificado
+      const rawData = await contract.methods.getCertificate(certificateId).call();
       console.log("📊 Datos obtenidos:", rawData);
 
       // Procesar datos
@@ -160,7 +200,9 @@ export default function Home() {
         arweaveHash: rawData.arweaveHash,
         issueDate: convertBigIntToNumber(rawData.issueDate),
         isActive: rawData.isActive,
-        certificateId: idToVerify
+        certificateId: certificateId,
+        transactionHash: hashToSearch,
+        blockNumber: convertBigIntToNumber(transactionReceipt.blockNumber)
       };
 
       setResult({
@@ -181,21 +223,21 @@ export default function Home() {
     setLoading(false);
   };
 
-  const useExampleCertificate = () => {
-    setCertificateId(EXAMPLE_CERTIFICATE_ID);
-    setTimeout(() => verifyCertificate(EXAMPLE_CERTIFICATE_ID), 100);
+  const useExampleTransaction = () => {
+    setTransactionHash(EXAMPLE_TRANSACTION_HASH);
+    setTimeout(() => findCertificateByTransactionHash(EXAMPLE_TRANSACTION_HASH), 100);
   };
 
   const retryVerification = () => {
     setResult(null);
-    verifyCertificate();
+    findCertificateByTransactionHash();
   };
 
   return (
     <div className="container">
       <header>
         <h1>🔍 Verificador de Certificados</h1>
-        <p>Verifica certificados en <strong>SONIC TESTNET</strong></p>
+        <p>Verifica certificados por <strong>Transaction Hash</strong> en SONIC TESTNET</p>
         
         <div className={`network-status ${networkStatus}`}>
           {networkStatus === 'checking' && (
@@ -223,34 +265,34 @@ export default function Home() {
       </header>
 
       <main>
-        {/* Campo de entrada para certificateId */}
+        {/* Campo de entrada para transaction hash */}
         <div className="input-section">
           <div className="input-group">
-            <label htmlFor="certificateId">ID del Certificado:</label>
+            <label htmlFor="transactionHash">Hash de la Transacción:</label>
             <input
-              id="certificateId"
+              id="transactionHash"
               type="text"
-              placeholder="Ingresa el ID del certificado (0x...)"
-              value={certificateId}
-              onChange={(e) => setCertificateId(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && verifyCertificate()}
+              placeholder="Ingresa el hash de la transacción (0x...)"
+              value={transactionHash}
+              onChange={(e) => setTransactionHash(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && findCertificateByTransactionHash()}
             />
             <button 
-              onClick={() => verifyCertificate()}
+              onClick={() => findCertificateByTransactionHash()}
               disabled={loading || networkStatus !== 'connected'}
               className="verify-btn"
             >
-              {loading ? '🔍 Verificando...' : '✅ Verificar Certificado'}
+              {loading ? '🔍 Buscando...' : '✅ Buscar Certificado'}
             </button>
           </div>
 
           <div className="example-section">
             <p>💡 <strong>Ejemplo para probar:</strong></p>
             <div className="example-card">
-              <code>{EXAMPLE_CERTIFICATE_ID}</code>
-              <p><small>Certificado de Jesus tincona - Crypto Cocha</small></p>
+              <code>{EXAMPLE_TRANSACTION_HASH}</code>
+              <p><small>Transacción de Carola España - blockcgate</small></p>
               <button 
-                onClick={useExampleCertificate}
+                onClick={useExampleTransaction}
                 disabled={networkStatus !== 'connected'}
                 className="example-btn"
               >
@@ -260,18 +302,18 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Resultados de la verificación */}
+        {/* Resultados de la búsqueda */}
         {loading && (
           <div className="loading">
             <div className="spinner"></div>
-            <p>Verificando certificado en blockchain...</p>
+            <p>Buscando certificado en blockchain...</p>
           </div>
         )}
 
         {result && result.found && result.isValid ? (
           <div className="result valid">
             <div className="success-header">
-              <h2>🎉 CERTIFICADO VERIFICADO EXITOSAMENTE</h2>
+              <h2>🎉 CERTIFICADO ENCONTRADO EXITOSAMENTE</h2>
               <p>El certificado existe y es válido en Sonic Testnet</p>
             </div>
             
@@ -311,6 +353,16 @@ export default function Home() {
                   <strong>🆔 ID del Certificado:</strong>
                   <code className="certificate-id">{result.certificateData.certificateId}</code>
                 </div>
+
+                <div className="detail-row">
+                  <strong>📫 Hash de Transacción:</strong>
+                  <code className="certificate-id">{result.certificateData.transactionHash}</code>
+                </div>
+
+                <div className="detail-row">
+                  <strong>🔢 Block Number:</strong>
+                  <span>{result.certificateData.blockNumber}</span>
+                </div>
               </div>
               
               <div className="blockchain-proof">
@@ -321,6 +373,17 @@ export default function Home() {
                   <p><strong>Red:</strong> Sonic Testnet (ChainID: 14601)</p>
                   <p><strong>Contrato:</strong> {CONTRACT_ADDRESS}</p>
                   <p><strong>RPC:</strong> {SONIC_RPC_URL}</p>
+                  <p>
+                    <strong>Explorer:</strong>{' '}
+                    <a 
+                      href={`https://testnet.soniclabs.com/tx/${result.certificateData.transactionHash}`}
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      style={{color: '#007bff', textDecoration: 'underline'}}
+                    >
+                      Ver transacción en Sonic Explorer
+                    </a>
+                  </p>
                 </div>
               </div>
             </div>
@@ -328,7 +391,7 @@ export default function Home() {
         ) : result && result.error ? (
           <div className="result invalid">
             <div className="error-header">
-              <h2>❌ ERROR EN LA VERIFICACIÓN</h2>
+              <h2>❌ ERROR EN LA BÚSQUEDA</h2>
               <p>{result.error}</p>
             </div>
             
@@ -336,7 +399,7 @@ export default function Home() {
               <div className="help-text">
                 <p><strong>Información para debugging:</strong></p>
                 <ul>
-                  <li><strong>CertificateId probado:</strong> {certificateId}</li>
+                  <li><strong>Transaction Hash probado:</strong> {transactionHash}</li>
                   <li><strong>Contrato:</strong> {CONTRACT_ADDRESS}</li>
                   <li><strong>RPC:</strong> {SONIC_RPC_URL}</li>
                   <li><strong>Estado de red:</strong> {networkStatus}</li>
@@ -344,7 +407,7 @@ export default function Home() {
               </div>
               
               <button onClick={retryVerification} className="retry-btn">
-                🔄 Reintentar Verificación
+                🔄 Reintentar Búsqueda
               </button>
             </div>
           </div>
