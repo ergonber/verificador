@@ -8,7 +8,7 @@ export default function Home() {
   const [networkStatus, setNetworkStatus] = useState('checking');
 
   // CONFIGURACIÓN QUEMADA EN CÓDIGO
-  const CONTRACT_ADDRESS = "0xa3081cd8f09dee3e5f0bcff197a40ff90720a05f";
+  const CONTRACT_ADDRESS = "0xAe48Ed8cD53e6e595E857872b1ac338E17F08549";
   const SONIC_RPC_URL = "https://rpc.testnet.soniclabs.com";
   
   // CERTIFICATE_ID de ejemplo (el de Jesus tincona)
