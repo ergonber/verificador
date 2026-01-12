@@ -8,6 +8,8 @@ export default function Home() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [networkStatus, setNetworkStatus] = useState('checking');
+  const [searchHistory, setSearchHistory] = useState([]);
+  const [pdfAvailable, setPdfAvailable] = useState(null);
 
   // CONFIGURACIÓN
   const CONTRACT_ADDRESS = "0xAe48Ed8cD53e6e595E857872b1ac338E17F08549";
@@ -82,35 +84,90 @@ export default function Home() {
     }
   ];
 
-  // Función para abrir PDF desde Pinata
-  const openPDFFromCID = (cid) => {
-    if (!cid) {
-      alert('No hay certificado PDF disponible');
-      return;
-    }
+  // Función para formatear CID
+  const formatCID = (cid) => {
+    if (!cid) return '';
     
-    // Limpiar el CID si tiene prefijo ipfs
-    const cleanCID = cid.replace('ipfs://', '').replace('/ipfs/', '');
+    const cleanCID = cid
+      .replace('ipfs://', '')
+      .replace('/ipfs/', '')
+      .replace('ipfs:', '')
+      .trim();
     
-    // URL del gateway de Pinata
-    const pdfUrl = `https://gateway.pinata.cloud/ipfs/${cleanCID}`;
-    
-    // Abrir en nueva pestaña
-    window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+    return cleanCID;
   };
 
   // Función para verificar si es un CID válido
   const isLikelyCID = (hash) => {
     if (!hash) return false;
     
+    const cleanHash = formatCID(hash);
+    
+    const cidPatterns = [
+      /^Qm[1-9A-HJ-NP-Za-km-z]{44}$/,
+      /^bafy[a-zA-Z0-9]{50,}$/,
+      /^bafk[a-zA-Z0-9]{50,}$/,
+      /^[A-Za-z0-9]{46,59}$/
+    ];
+    
+    return cidPatterns.some(pattern => pattern.test(cleanHash));
+  };
+
+  // Función para abrir PDF desde Pinata
+  const openPDFFromCID = async (cid) => {
+    if (!cid) {
+      alert('No hay certificado PDF disponible');
+      return;
+    }
+    
+    const cleanCID = formatCID(cid);
+    
+    const gateways = [
+      `https://gateway.pinata.cloud/ipfs/${cleanCID}`,
+      `https://ipfs.io/ipfs/${cleanCID}`,
+      `https://cloudflare-ipfs.com/ipfs/${cleanCID}`
+    ];
+    
+    const pdfUrl = gateways[0];
+    console.log("🔗 Abriendo PDF desde:", pdfUrl);
+    
+    window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  // Función para verificar disponibilidad del PDF
+  const checkPDFAvailability = async (cid) => {
+    try {
+      const cleanCID = formatCID(cid);
+      const response = await fetch(`https://gateway.pinata.cloud/ipfs/${cleanCID}`, {
+        method: 'HEAD'
+      });
+      
+      return response.ok;
+    } catch (error) {
+      console.error('Error verificando PDF:', error);
+      return false;
+    }
+  };
+
+  // Validación de hash de transacción
+  const validateTransactionHash = (hash) => {
+    if (!hash) return 'Ingresa un hash de transacción';
+    
     const cleanHash = hash.trim();
-    return (
-      cleanHash.startsWith('Qm') ||
-      cleanHash.startsWith('bafy') ||
-      cleanHash.includes('ipfs') ||
-      cleanHash.length === 46 ||
-      /^[A-Za-z0-9]{46,59}$/.test(cleanHash)
-    );
+    
+    if (cleanHash.length !== 66) {
+      return 'El hash debe tener 66 caracteres (0x + 64 caracteres hex)';
+    }
+    
+    if (!cleanHash.startsWith('0x')) {
+      return 'El hash debe comenzar con 0x';
+    }
+    
+    if (!/^0x[0-9a-fA-F]{64}$/.test(cleanHash)) {
+      return 'El hash contiene caracteres inválidos';
+    }
+    
+    return null;
   };
 
   useEffect(() => {
@@ -119,8 +176,36 @@ export default function Home() {
     console.log("   RPC:", SONIC_RPC_URL);
     console.log("   Contrato:", CONTRACT_ADDRESS);
     
+    // Cargar historial desde localStorage
+    const savedHistory = localStorage.getItem('certificateSearchHistory');
+    if (savedHistory) {
+      setSearchHistory(JSON.parse(savedHistory));
+    }
+    
     checkNetworkStatus();
   }, []);
+
+  // Guardar historial en localStorage
+  useEffect(() => {
+    if (searchHistory.length > 0) {
+      localStorage.setItem('certificateSearchHistory', JSON.stringify(searchHistory));
+    }
+  }, [searchHistory]);
+
+  // Verificar disponibilidad de PDF cuando se obtienen resultados
+  useEffect(() => {
+    const verifyPDF = async () => {
+      if (result?.certificateData?.arweaveHash && isLikelyCID(result.certificateData.arweaveHash)) {
+        setPdfAvailable('checking');
+        const available = await checkPDFAvailability(result.certificateData.arweaveHash);
+        setPdfAvailable(available ? 'available' : 'unavailable');
+      } else {
+        setPdfAvailable(null);
+      }
+    };
+    
+    verifyPDF();
+  }, [result]);
 
   const checkNetworkStatus = async () => {
     setNetworkStatus('checking');
@@ -144,13 +229,10 @@ export default function Home() {
   };
 
   const findCertificateByTransactionHash = async (hashToSearch = transactionHash) => {
-    if (!hashToSearch.trim()) {
-      alert("Por favor ingresa el hash de la transacción");
-      return;
-    }
-
-    if (hashToSearch.length !== 66 || !hashToSearch.startsWith('0x')) {
-      alert("El hash de transacción debe tener 66 caracteres y comenzar con '0x'");
+    // Validar input
+    const validationError = validateTransactionHash(hashToSearch);
+    if (validationError) {
+      alert(validationError);
       return;
     }
 
@@ -159,6 +241,7 @@ export default function Home() {
     
     setLoading(true);
     setResult(null);
+    setPdfAvailable(null);
 
     try {
       if (networkStatus === 'disconnected') {
@@ -230,10 +313,27 @@ export default function Home() {
         blockNumber: convertBigIntToNumber(transactionReceipt.blockNumber)
       };
 
-      setResult({
+      const resultData = {
         isValid: true,
         certificateData: certificateData,
         found: true
+      };
+
+      setResult(resultData);
+
+      // Guardar en historial
+      const newSearch = {
+        hash: hashToSearch,
+        studentName: certificateData.recipientName,
+        courseName: certificateData.eventName,
+        timestamp: Date.now(),
+        cid: certificateData.arweaveHash,
+        isValid: true
+      };
+      
+      setSearchHistory(prev => {
+        const filtered = prev.filter(item => item.hash !== hashToSearch);
+        return [newSearch, ...filtered.slice(0, 9)]; // Máximo 10 items
       });
 
     } catch (error) {
@@ -256,6 +356,18 @@ export default function Home() {
   const retryVerification = () => {
     setResult(null);
     findCertificateByTransactionHash();
+  };
+
+  const clearHistory = () => {
+    setSearchHistory([]);
+    localStorage.removeItem('certificateSearchHistory');
+  };
+
+  const formatDate = (timestamp) => {
+    return new Date(timestamp).toLocaleTimeString('es-ES', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   return (
@@ -301,28 +413,74 @@ export default function Home() {
               onChange={(e) => setTransactionHash(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && findCertificateByTransactionHash()}
             />
-            <button 
-              onClick={() => findCertificateByTransactionHash()}
-              disabled={loading || networkStatus !== 'connected'}
-              className="verify-btn"
-            >
-              {loading ? '🔍 Buscando...' : '✅ Buscar Certificado'}
-            </button>
+            <div className="input-buttons">
+              <button 
+                onClick={() => findCertificateByTransactionHash()}
+                disabled={loading || networkStatus !== 'connected'}
+                className="verify-btn"
+              >
+                {loading ? (
+                  <>
+                    <span className="spinner-small"></span>
+                    Buscando...
+                  </>
+                ) : '✅ Buscar Certificado'}
+              </button>
+              <button 
+                onClick={useExampleTransaction}
+                disabled={networkStatus !== 'connected'}
+                className="example-btn"
+              >
+                Usar Ejemplo
+              </button>
+            </div>
           </div>
 
           <div className="example-hash">
             <p><strong>💡 Ejemplo para probar:</strong></p>
-            <code>{EXAMPLE_TRANSACTION_HASH}</code>
+            <code className="hash-example">{EXAMPLE_TRANSACTION_HASH}</code>
             <p><small>Transacción de Carola España - blockcgate</small></p>
-            <button 
-              onClick={useExampleTransaction}
-              disabled={networkStatus !== 'connected'}
-              className="example-btn"
-            >
-              Usar este ejemplo
-            </button>
           </div>
         </div>
+
+        {searchHistory.length > 0 && (
+          <div className="search-history">
+            <div className="history-header">
+              <h3>📚 Historial de Búsquedas</h3>
+              <button onClick={clearHistory} className="clear-history-btn">
+                Limpiar
+              </button>
+            </div>
+            <div className="history-list">
+              {searchHistory.map((item, index) => (
+                <div 
+                  key={index} 
+                  className={`history-item ${item.isValid ? 'valid' : 'invalid'}`}
+                  onClick={() => {
+                    setTransactionHash(item.hash);
+                    findCertificateByTransactionHash(item.hash);
+                  }}
+                >
+                  <div className="history-content">
+                    <div className="history-main">
+                      <strong>{item.studentName || 'Sin nombre'}</strong>
+                      <span className="history-course">{item.courseName || 'Sin curso'}</span>
+                    </div>
+                    <div className="history-meta">
+                      <span className="history-time">{formatDate(item.timestamp)}</span>
+                      <span className="history-hash">
+                        {item.hash.substring(0, 8)}...{item.hash.substring(58)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="history-status">
+                    {item.isValid ? '✅' : '❌'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {loading && (
           <div className="loading" style={{display: 'block'}}>
@@ -377,7 +535,7 @@ export default function Home() {
 
                 <div className="detail-row">
                   <strong>📫 Hash de Transacción:</strong>
-                  <code className="certificate-id">{result.certificateData.transactionHash}</code>
+                  <code className="transaction-hash">{result.certificateData.transactionHash}</code>
                 </div>
 
                 <div className="detail-row">
@@ -385,29 +543,62 @@ export default function Home() {
                   <span>{result.certificateData.blockNumber}</span>
                 </div>
 
-                {/* NUEVA SECCIÓN: ENLACE AL PDF */}
-                {result.certificateData.arweaveHash && isLikelyCID(result.certificateData.arweaveHash) && (
-                  <div className="detail-row">
-                    <strong>📄 Certificado PDF:</strong>
-                    <div className="pdf-link-container">
-                      <button 
-                        onClick={() => openPDFFromCID(result.certificateData.arweaveHash)}
-                        className="pdf-view-btn"
-                      >
-                        <span className="pdf-icon">📥</span>
-                        Ver Certificado PDF
-                        <span className="pdf-cid">
-                          ({result.certificateData.arweaveHash.substring(0, 10)}...{result.certificateData.arweaveHash.substring(result.certificateData.arweaveHash.length - 10)})
-                        </span>
-                      </button>
-                      <p className="pdf-info">
-                        <small>CID: {result.certificateData.arweaveHash}</small>
-                        <br />
-                        <small>Almacenado en Pinata IPFS</small>
-                      </p>
-                    </div>
+                {/* SECCIÓN PDF MEJORADA */}
+                <div className="detail-row">
+                  <strong>📄 Certificado PDF:</strong>
+                  <div className="pdf-section">
+                    {result.certificateData.arweaveHash ? (
+                      isLikelyCID(result.certificateData.arweaveHash) ? (
+                        <div className="pdf-available">
+                          <button 
+                            onClick={() => openPDFFromCID(result.certificateData.arweaveHash)}
+                            className="pdf-view-btn"
+                            disabled={pdfAvailable === 'checking'}
+                          >
+                            {pdfAvailable === 'checking' ? (
+                              <>
+                                <span className="spinner-small"></span>
+                                Verificando...
+                              </>
+                            ) : (
+                              <>
+                                <span className="pdf-icon">📥</span>
+                                Ver Certificado PDF
+                                {pdfAvailable === 'available' && (
+                                  <span className="pdf-badge">✓ DISPONIBLE</span>
+                                )}
+                                {pdfAvailable === 'unavailable' && (
+                                  <span className="pdf-badge unavailable">✗ NO DISPONIBLE</span>
+                                )}
+                              </>
+                            )}
+                          </button>
+                          <div className="cid-info">
+                            <small>
+                              CID: {formatCID(result.certificateData.arweaveHash).substring(0, 20)}...
+                              {formatCID(result.certificateData.arweaveHash).substring(formatCID(result.certificateData.arweaveHash).length - 10)}
+                            </small>
+                            <br />
+                            <small className="storage-info">Almacenado en Pinata IPFS</small>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="pdf-unavailable">
+                          <span className="pdf-icon">❓</span>
+                          <div>
+                            <span>Hash no es un CID válido</span>
+                            <small>Valor almacenado: {result.certificateData.arweaveHash}</small>
+                          </div>
+                        </div>
+                      )
+                    ) : (
+                      <div className="pdf-unavailable">
+                        <span className="pdf-icon">❌</span>
+                        <span>No hay PDF asociado</span>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
               
               <div className="blockchain-proof">
