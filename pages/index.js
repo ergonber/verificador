@@ -1,5 +1,7 @@
+// pages/index.js
 import { useState, useEffect } from 'react';
 import Web3 from 'web3';
+import '../styles/globals.css';
 
 export default function Home() {
   const [transactionHash, setTransactionHash] = useState('');
@@ -80,6 +82,37 @@ export default function Home() {
     }
   ];
 
+  // Función para abrir PDF desde Pinata
+  const openPDFFromCID = (cid) => {
+    if (!cid) {
+      alert('No hay certificado PDF disponible');
+      return;
+    }
+    
+    // Limpiar el CID si tiene prefijo ipfs
+    const cleanCID = cid.replace('ipfs://', '').replace('/ipfs/', '');
+    
+    // URL del gateway de Pinata
+    const pdfUrl = `https://gateway.pinata.cloud/ipfs/${cleanCID}`;
+    
+    // Abrir en nueva pestaña
+    window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  // Función para verificar si es un CID válido
+  const isLikelyCID = (hash) => {
+    if (!hash) return false;
+    
+    const cleanHash = hash.trim();
+    return (
+      cleanHash.startsWith('Qm') ||
+      cleanHash.startsWith('bafy') ||
+      cleanHash.includes('ipfs') ||
+      cleanHash.length === 46 ||
+      /^[A-Za-z0-9]{46,59}$/.test(cleanHash)
+    );
+  };
+
   useEffect(() => {
     console.log("🚀 Verificador de Certificados listo");
     console.log("🔧 Configuración:");
@@ -116,7 +149,6 @@ export default function Home() {
       return;
     }
 
-    // Validar formato de transaction hash
     if (hashToSearch.length !== 66 || !hashToSearch.startsWith('0x')) {
       alert("El hash de transacción debe tener 66 caracteres y comenzar con '0x'");
       return;
@@ -138,7 +170,6 @@ export default function Home() {
 
       console.log("📄 Obteniendo receipt de la transacción...");
       
-      // 1. Obtener el receipt de la transacción
       const transactionReceipt = await web3.eth.getTransactionReceipt(hashToSearch);
       console.log("📋 Transaction receipt:", transactionReceipt);
 
@@ -150,7 +181,6 @@ export default function Home() {
         throw new Error("No se encontraron logs en la transacción");
       }
 
-      // 2. Buscar el certificateId en los logs
       let certificateId = null;
       
       console.log("📋 Logs encontrados:", transactionReceipt.logs.length);
@@ -159,11 +189,9 @@ export default function Home() {
         const log = transactionReceipt.logs[i];
         console.log(`🔍 Log ${i}:`, log);
         
-        // Si el log es del contrato de certificados
         if (log.address.toLowerCase() === CONTRACT_ADDRESS.toLowerCase()) {
           console.log("🎯 Log del contrato de certificados encontrado");
           
-          // El certificateId está en el segundo topic (índice 1)
           if (log.topics && log.topics.length > 1) {
             certificateId = log.topics[1];
             console.log("🎯 CertificateId encontrado en topics:", certificateId);
@@ -178,7 +206,6 @@ export default function Home() {
 
       console.log("🔍 Verificando certificado con ID:", certificateId);
       
-      // 3. Verificar si el certificado es válido
       const isValid = await contract.methods.verifyCertificate(certificateId).call();
       console.log(`✅ Certificado válido: ${isValid}`);
 
@@ -188,11 +215,9 @@ export default function Home() {
 
       console.log("📋 Obteniendo datos del certificado...");
       
-      // 4. Obtener todos los datos del certificado
       const rawData = await contract.methods.getCertificate(certificateId).call();
       console.log("📊 Datos obtenidos:", rawData);
 
-      // Procesar datos
       const certificateData = {
         issuer: rawData.issuer,
         recipientName: rawData.recipientName,
@@ -237,7 +262,7 @@ export default function Home() {
     <div className="container">
       <header>
         <h1>🔍 Verificador de Certificados</h1>
-        <p>Verifica certificados por <strong>Transaction Hash</strong> en SONIC TESTNET</p>
+        <p className="subtitle">Verifica certificados por <strong>Transaction Hash</strong> en SONIC TESTNET</p>
         
         <div className={`network-status ${networkStatus}`}>
           {networkStatus === 'checking' && (
@@ -265,7 +290,6 @@ export default function Home() {
       </header>
 
       <main>
-        {/* Campo de entrada para transaction hash */}
         <div className="input-section">
           <div className="input-group">
             <label htmlFor="transactionHash">Hash de la Transacción:</label>
@@ -286,32 +310,29 @@ export default function Home() {
             </button>
           </div>
 
-          <div className="example-section">
-            <p>💡 <strong>Ejemplo para probar:</strong></p>
-            <div className="example-card">
-              <code>{EXAMPLE_TRANSACTION_HASH}</code>
-              <p><small>Transacción de Carola España - blockcgate</small></p>
-              <button 
-                onClick={useExampleTransaction}
-                disabled={networkStatus !== 'connected'}
-                className="example-btn"
-              >
-                Usar este ejemplo
-              </button>
-            </div>
+          <div className="example-hash">
+            <p><strong>💡 Ejemplo para probar:</strong></p>
+            <code>{EXAMPLE_TRANSACTION_HASH}</code>
+            <p><small>Transacción de Carola España - blockcgate</small></p>
+            <button 
+              onClick={useExampleTransaction}
+              disabled={networkStatus !== 'connected'}
+              className="example-btn"
+            >
+              Usar este ejemplo
+            </button>
           </div>
         </div>
 
-        {/* Resultados de la búsqueda */}
         {loading && (
-          <div className="loading">
+          <div className="loading" style={{display: 'block'}}>
             <div className="spinner"></div>
             <p>Buscando certificado en blockchain...</p>
           </div>
         )}
 
         {result && result.found && result.isValid ? (
-          <div className="result valid">
+          <div className="result valid" style={{display: 'block'}}>
             <div className="success-header">
               <h2>🎉 CERTIFICADO ENCONTRADO EXITOSAMENTE</h2>
               <p>El certificado existe y es válido en Sonic Testnet</p>
@@ -363,6 +384,30 @@ export default function Home() {
                   <strong>🔢 Block Number:</strong>
                   <span>{result.certificateData.blockNumber}</span>
                 </div>
+
+                {/* NUEVA SECCIÓN: ENLACE AL PDF */}
+                {result.certificateData.arweaveHash && isLikelyCID(result.certificateData.arweaveHash) && (
+                  <div className="detail-row">
+                    <strong>📄 Certificado PDF:</strong>
+                    <div className="pdf-link-container">
+                      <button 
+                        onClick={() => openPDFFromCID(result.certificateData.arweaveHash)}
+                        className="pdf-view-btn"
+                      >
+                        <span className="pdf-icon">📥</span>
+                        Ver Certificado PDF
+                        <span className="pdf-cid">
+                          ({result.certificateData.arweaveHash.substring(0, 10)}...{result.certificateData.arweaveHash.substring(result.certificateData.arweaveHash.length - 10)})
+                        </span>
+                      </button>
+                      <p className="pdf-info">
+                        <small>CID: {result.certificateData.arweaveHash}</small>
+                        <br />
+                        <small>Almacenado en Pinata IPFS</small>
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
               
               <div className="blockchain-proof">
@@ -379,7 +424,7 @@ export default function Home() {
                       href={`https://testnet.soniclabs.com/tx/${result.certificateData.transactionHash}`}
                       target="_blank" 
                       rel="noopener noreferrer"
-                      style={{color: '#007bff', textDecoration: 'underline'}}
+                      className="explorer-link"
                     >
                       Ver transacción en Sonic Explorer
                     </a>
@@ -389,7 +434,7 @@ export default function Home() {
             </div>
           </div>
         ) : result && result.error ? (
-          <div className="result invalid">
+          <div className="result invalid" style={{display: 'block'}}>
             <div className="error-header">
               <h2>❌ ERROR EN LA BÚSQUEDA</h2>
               <p>{result.error}</p>
@@ -433,359 +478,6 @@ export default function Home() {
           </div>
         </div>
       </main>
-
-      <style jsx>{`
-        .container {
-          max-width: 800px;
-          margin: 0 auto;
-          padding: 20px;
-          font-family: Arial, sans-serif;
-          min-height: 100vh;
-        }
-        
-        header {
-          text-align: center;
-          margin-bottom: 40px;
-          padding: 30px;
-          background: white;
-          border-radius: 15px;
-          box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        
-        h1 {
-          color: #2c5530;
-          margin-bottom: 10px;
-        }
-        
-        .network-status {
-          margin-top: 20px;
-          padding: 15px;
-          border-radius: 10px;
-          font-weight: bold;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        
-        .network-status.connected {
-          background: #d4edda;
-          border: 2px solid #28a745;
-          color: #155724;
-        }
-        
-        .network-status.disconnected {
-          background: #f8d7da;
-          border: 2px solid #dc3545;
-          color: #721c24;
-        }
-        
-        .network-status.checking {
-          background: #fff3cd;
-          border: 2px solid #ffc107;
-          color: #856404;
-        }
-        
-        .status-dot {
-          display: inline-block;
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
-          margin-right: 10px;
-        }
-        
-        .status-dot.connected { background: #28a745; }
-        .status-dot.disconnected { background: #dc3545; }
-        .status-dot.checking { 
-          background: #ffc107; 
-          animation: pulse 1.5s infinite;
-        }
-        
-        .retry-btn.small {
-          margin-left: 15px;
-          padding: 5px 10px;
-          background: #dc3545;
-          color: white;
-          border: none;
-          border-radius: 4px;
-          font-size: 12px;
-          cursor: pointer;
-        }
-        
-        .input-section {
-          background: white;
-          padding: 30px;
-          border-radius: 15px;
-          box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-          margin-bottom: 30px;
-        }
-        
-        .input-group {
-          margin-bottom: 25px;
-        }
-        
-        label {
-          display: block;
-          margin-bottom: 8px;
-          font-weight: bold;
-          color: #495057;
-        }
-        
-        input {
-          width: 100%;
-          padding: 15px;
-          border: 2px solid #ddd;
-          border-radius: 10px;
-          font-size: 16px;
-          margin-bottom: 15px;
-        }
-        
-        input:focus {
-          outline: none;
-          border-color: #2c5530;
-        }
-        
-        .verify-btn {
-          width: 100%;
-          padding: 15px;
-          background: #2c5530;
-          color: white;
-          border: none;
-          border-radius: 10px;
-          font-size: 16px;
-          font-weight: bold;
-          cursor: pointer;
-        }
-        
-        .verify-btn:hover:not(:disabled) {
-          background: #1e3a24;
-        }
-        
-        .verify-btn:disabled {
-          background: #ccc;
-          cursor: not-allowed;
-        }
-        
-        .example-section {
-          border-top: 2px solid #f8f9fa;
-          padding-top: 20px;
-        }
-        
-        .example-card {
-          background: #f8f9fa;
-          padding: 15px;
-          border-radius: 8px;
-          margin-top: 10px;
-          text-align: center;
-        }
-        
-        .example-btn {
-          background: #6c757d;
-          color: white;
-          border: none;
-          padding: 8px 16px;
-          border-radius: 6px;
-          cursor: pointer;
-          margin-top: 10px;
-        }
-        
-        .example-btn:hover:not(:disabled) {
-          background: #5a6268;
-        }
-        
-        .loading {
-          text-align: center;
-          padding: 60px 20px;
-          background: white;
-          border-radius: 15px;
-          box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-          margin-bottom: 30px;
-        }
-        
-        .spinner {
-          border: 4px solid #f3f3f3;
-          border-top: 4px solid #2c5530;
-          border-radius: 50%;
-          width: 50px;
-          height: 50px;
-          animation: spin 1s linear infinite;
-          margin: 0 auto 20px;
-        }
-        
-        .result {
-          padding: 0;
-          border-radius: 15px;
-          margin-bottom: 30px;
-          background: white;
-          box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-          overflow: hidden;
-        }
-        
-        .result.valid {
-          border: 2px solid #28a745;
-        }
-        
-        .result.invalid {
-          border: 2px solid #dc3545;
-        }
-        
-        .success-header, .error-header {
-          padding: 30px;
-          text-align: center;
-        }
-        
-        .success-header {
-          background: linear-gradient(135deg, #28a745, #20c997);
-          color: white;
-        }
-        
-        .error-header {
-          background: linear-gradient(135deg, #dc3545, #e83e8c);
-          color: white;
-        }
-        
-        .certificate-card {
-          padding: 30px;
-        }
-        
-        .certificate-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 25px;
-          padding-bottom: 15px;
-          border-bottom: 2px solid #e9ecef;
-        }
-        
-        .status-badge {
-          padding: 8px 16px;
-          border-radius: 20px;
-          font-weight: bold;
-          font-size: 14px;
-        }
-        
-        .status-badge.valid {
-          background: #d4edda;
-          color: #155724;
-          border: 1px solid #c3e6cb;
-        }
-        
-        .certificate-details {
-          margin-bottom: 25px;
-        }
-        
-        .detail-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          padding: 12px 0;
-          border-bottom: 1px solid #f8f9fa;
-        }
-        
-        .detail-row strong {
-          color: #495057;
-          min-width: 150px;
-        }
-        
-        .status-active {
-          color: #28a745;
-          font-weight: bold;
-        }
-        
-        .certificate-id {
-          background: #f8f9fa;
-          padding: 8px 12px;
-          border-radius: 6px;
-          font-size: 12px;
-          word-break: break-all;
-          display: block;
-          margin-top: 5px;
-        }
-        
-        .blockchain-proof {
-          background: #f8f9fa;
-          padding: 20px;
-          border-radius: 10px;
-          border-left: 4px solid #007bff;
-        }
-        
-        .proof-header {
-          margin-bottom: 15px;
-          color: #007bff;
-        }
-        
-        .error-details {
-          padding: 30px;
-        }
-        
-        .help-text {
-          background: #fff3cd;
-          padding: 20px;
-          border-radius: 8px;
-          margin-bottom: 20px;
-          border-left: 4px solid #ffc107;
-        }
-        
-        .help-text ul {
-          margin: 10px 0;
-          padding-left: 20px;
-        }
-        
-        .retry-btn {
-          width: 100%;
-          padding: 15px;
-          background: #dc3545;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          font-size: 16px;
-          font-weight: bold;
-          cursor: pointer;
-        }
-        
-        .retry-btn:hover {
-          background: #c82333;
-        }
-        
-        .system-info {
-          background: white;
-          padding: 25px;
-          border-radius: 15px;
-          box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        
-        .info-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 15px;
-          margin-top: 15px;
-        }
-        
-        .info-item {
-          padding: 12px;
-          background: #f8f9fa;
-          border-radius: 8px;
-          border: 1px solid #e9ecef;
-        }
-        
-        code {
-          background: #e9ecef;
-          padding: 4px 8px;
-          border-radius: 4px;
-          font-size: 12px;
-          word-break: break-all;
-        }
-        
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        
-        @keyframes pulse {
-          0% { opacity: 1; }
-          50% { opacity: 0.5; }
-          100% { opacity: 1; }
-        }
-      `}</style>
     </div>
   );
 }
