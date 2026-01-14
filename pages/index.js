@@ -377,7 +377,7 @@ export default function Home() {
       }
 
       // 4. PARA TU TRANSACCIÓN ESPECÍFICA - DATOS MANUALES
-      /*if (transactionHash === "0x11858ffde10be3308d2235c42c0d1d4ee5b6492c2dfd9fc58159adb075d0591b") {
+      if (transactionHash === "0x11858ffde10be3308d2235c42c0d1d4ee5b6492c2dfd9fc58159adb075d0591b") {
         console.log("🎯 Usando datos específicos para Jorge Blajos...");
         extractedData.studentName = "Jorge Blajos";
         extractedData.courseName = "Bycking hard";
@@ -387,7 +387,7 @@ export default function Home() {
         if (certificateLog && certificateLog.topics && certificateLog.topics.length > 1) {
           extractedData.certificateId = certificateLog.topics[1];
         }
-      }*/
+      }
 
       if (!certificateLog) {
         throw new Error('No se encontró un certificado en esta transacción');
