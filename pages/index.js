@@ -819,7 +819,7 @@ export default function Home() {
                         color: '#6b7280',
                         fontStyle: 'italic'
                       }}>
-                        Almacenado en Pinata IPFS
+                        Almacenado en Pinata IPFS, REVISE QUE ESTE CODIGO COINCIDA CON LA URL QUE MUESTRA EL CERTIFICADO¡¡¡¡
                       </div>
                     </div>
                   </div>
