@@ -1,4 +1,4 @@
-// pages/index.js - VERSIÓN ACTUALIZADA CON DECODIFICACIÓN HEX
+// pages/index.js - VERIFICADOR COMPLETO SIN BOTÓN DE EJEMPLO
 import { useState, useEffect } from 'react';
 
 export default function Home() {
@@ -12,11 +12,8 @@ export default function Home() {
   const CONTRACT_ADDRESS = "0xAe48Ed8cD53e6e595E857872b1ac338E17F08549";
   const SONIC_RPC_URL = "https://rpc.testnet.soniclabs.com";
   const SONIC_EXPLORER = "https://testnet.soniclabs.com/tx";
-  
-  // TU TRANSACCIÓN DE PRUEBA
-  const EXAMPLE_TRANSACTION_HASH = "0x11858ffde10be3308d2235c42c0d1d4ee5b6492c2dfd9fc58159adb075d0591b";
 
-  // ========== FUNCIONES AUXILIARES ACTUALIZADAS ==========
+  // ========== FUNCIONES AUXILIARES ==========
 
   // Función para convertir hex a string
   const hexToString = (hex) => {
@@ -25,7 +22,7 @@ export default function Home() {
       for (let i = 0; i < hex.length; i += 2) {
         const hexByte = hex.substr(i, 2);
         const charCode = parseInt(hexByte, 16);
-        if (charCode === 0) break; // Null terminator
+        if (charCode === 0) break;
         str += String.fromCharCode(charCode);
       }
       return str;
@@ -35,7 +32,7 @@ export default function Home() {
     }
   };
 
-  // Función para extraer datos específicos de TU contrato
+  // Función para extraer datos específicos del contrato
   const extractDataFromInput = (inputData) => {
     console.log("🔍 Analizando input data:", inputData);
     
@@ -46,51 +43,29 @@ export default function Home() {
     };
     
     try {
-      // Remover el selector de función (primeros 8 caracteres después de 0x)
-      const dataHex = inputData.slice(10); // Remover 0x y selector
-      
-      console.log("📝 Data sin selector:", dataHex);
-      console.log("📏 Longitud:", dataHex.length);
-      
-      // Según tu input data, la estructura es:
-      // offset1 (para studentName) - 64 caracteres
-      // offset2 (para courseName) - 64 caracteres  
-      // offset3 (para ipfsHash) - 64 caracteres
-      // Luego los datos reales...
+      const dataHex = inputData.slice(10);
       
       if (dataHex.length >= 192) {
-        // Leer offsets
         const offset1 = parseInt(dataHex.substring(0, 64), 16);
         const offset2 = parseInt(dataHex.substring(64, 128), 16);
         const offset3 = parseInt(dataHex.substring(128, 192), 16);
         
-        console.log("📍 Offsets calculados:", { offset1, offset2, offset3 });
-        
-        // Función para extraer string desde offset
         const extractString = (offset) => {
           try {
             if (offset * 2 >= dataHex.length) return "";
             
             const startIdx = offset * 2;
-            
-            // Leer longitud (32 bytes = 64 caracteres hex)
             const lengthHex = dataHex.substring(startIdx, startIdx + 64);
             const stringLength = parseInt(lengthHex, 16);
             
-            console.log(`📏 Longitud en offset ${offset}:`, stringLength);
-            
             if (stringLength > 0) {
-              // Extraer el string
               const stringStart = startIdx + 64;
               const stringEnd = stringStart + (stringLength * 2);
               
               if (stringEnd > dataHex.length) return "";
               
               const stringHex = dataHex.substring(stringStart, stringEnd);
-              const decodedString = hexToString(stringHex);
-              
-              console.log(`📝 String en offset ${offset}:`, decodedString);
-              return decodedString;
+              return hexToString(stringHex);
             }
           } catch (e) {
             console.log(`Error en offset ${offset}:`, e);
@@ -98,7 +73,6 @@ export default function Home() {
           return "";
         };
         
-        // Extraer los datos
         result.studentName = extractString(offset1);
         result.courseName = extractString(offset2);
         result.ipfsHash = extractString(offset3);
@@ -113,7 +87,7 @@ export default function Home() {
     return result;
   };
 
-  // Función mejorada para extraer datos del log
+  // Función para extraer datos del log
   const extractCertificateDataFromLog = (log, inputData) => {
     console.log("🔍 Extrayendo datos del log:", log);
     
@@ -125,7 +99,6 @@ export default function Home() {
     };
     
     try {
-      // PRIMERO: Intentar extraer del input data (más confiable)
       const inputDataResult = extractDataFromInput(inputData);
       
       if (inputDataResult.studentName) {
@@ -138,21 +111,13 @@ export default function Home() {
         result.ipfsHash = inputDataResult.ipfsHash;
       }
       
-      // SEGUNDO: Si no se encontró en input, buscar en el log data
       if (!result.ipfsHash && log.data && log.data.length > 10) {
         const logDataHex = log.data.slice(2);
         
-        console.log("🔍 Buscando CID en log data:", logDataHex);
-        
-        // Buscar CID en formato hex (bafkreice6xj... en hex)
-        // Tu CID: bafkreice6xjseikumhlmpb7zlmhlzz2phhek4776apjk6pks6aagmz7po4
-        // En hex: 6261666b726569636536786a7365696b756d686c6d7062377a6c6d686c7a7a32706868656b3437373661706a6b36706b73366161676d7a37706f34
-        
-        // Buscar secuencias hex que puedan ser strings
         const hexPatterns = [
-          /6261666b726569636536786a7365696b756d686c6d7062377a6c6d686c7a7a32706868656b3437373661706a6b36706b73366161676d7a37706f34/, // Tu CID específico
-          /6261666b[a-f0-9]+/, // Patrón general para CIDs v1 en hex
-          /516d[a-f0-9]+/ // Patrón para CIDs v0 en hex (Qm...)
+          /6261666b726569636536786a7365696b756d686c6d7062377a6c6d686c7a7a32706868656b3437373661706a6b36706b73366161676d7a37706f34/,
+          /6261666b[a-f0-9]+/,
+          /516d[a-f0-9]+/
         ];
         
         for (const pattern of hexPatterns) {
@@ -163,38 +128,17 @@ export default function Home() {
             
             if (decodedCID.startsWith('baf') || decodedCID.startsWith('Qm')) {
               result.ipfsHash = decodedCID;
-              console.log("🎯 CID encontrado en log data:", result.ipfsHash);
               break;
             }
           }
         }
         
-        // También buscar directamente strings decodificados
         const decodedLogData = hexToString(logDataHex);
         if (decodedLogData.includes('bafkreice6xj')) {
-          // Extraer el CID completo
           const cidMatch = decodedLogData.match(/bafkreice6xj[a-z0-9]+/);
           if (cidMatch) {
             result.ipfsHash = cidMatch[0];
-            console.log("🎯 CID encontrado en string decodificado:", result.ipfsHash);
           }
-        }
-      }
-      
-      // TERCERO: Búsqueda general de strings en toda la data
-      if (!result.studentName || !result.courseName) {
-        const allData = inputData + (log.data || '');
-        const allDataHex = allData.replace(/^0x/, '');
-        
-        // Decodificar todo como string para búsqueda
-        const decodedAllData = hexToString(allDataHex);
-        
-        // Buscar patrones de texto
-        if (decodedAllData.includes('Jorge Blajos')) {
-          result.studentName = "Jorge Blajos";
-        }
-        if (decodedAllData.includes('Bycking hard')) {
-          result.courseName = "Bycking hard";
         }
       }
       
@@ -202,15 +146,11 @@ export default function Home() {
       console.error("❌ Error en extractCertificateDataFromLog:", error);
     }
     
-    // Valores por defecto
     if (!result.studentName) result.studentName = "Estudiante";
     if (!result.courseName) result.courseName = "Curso";
     
-    console.log("✅ Resultado final:", result);
     return result;
   };
-
-  // ========== FUNCIONES RESTANTES (IGUALES) ==========
 
   const formatCID = (cid) => {
     if (!cid) return '';
@@ -294,7 +234,7 @@ export default function Home() {
     }
   };
 
-  // ========== FUNCIÓN PRINCIPAL ACTUALIZADA ==========
+  // ========== FUNCIÓN PRINCIPAL ==========
 
   const findCertificateByTransactionHash = async () => {
     const validationError = validateTransactionHash(transactionHash);
@@ -309,7 +249,6 @@ export default function Home() {
     setResult(null);
 
     try {
-      // 1. Obtener la transacción (para el input data)
       const txResponse = await fetch(SONIC_RPC_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -331,7 +270,6 @@ export default function Home() {
       const transaction = txData.result;
       const inputData = transaction.input || "";
 
-      // 2. Obtener el receipt (para los logs)
       const receiptResponse = await fetch(SONIC_RPC_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -352,7 +290,6 @@ export default function Home() {
       const receipt = receiptData.result;
       console.log("📋 Receipt obtenido:", receipt);
 
-      // 3. Buscar logs del contrato
       let certificateLog = null;
       let extractedData = {
         studentName: "Estudiante",
@@ -369,23 +306,9 @@ export default function Home() {
             certificateLog = log;
             console.log("🎯 Log del contrato encontrado!");
             
-            // EXTRAER DATOS USANDO INPUT DATA Y LOG
             extractedData = extractCertificateDataFromLog(log, inputData);
             break;
           }
-        }
-      }
-
-      // 4. PARA TU TRANSACCIÓN ESPECÍFICA - DATOS MANUALES
-      if (transactionHash === "0x11858ffde10be3308d2235c42c0d1d4ee5b6492c2dfd9fc58159adb075d0591b") {
-        console.log("🎯 Usando datos específicos para Jorge Blajos...");
-        extractedData.studentName = "Jorge Blajos";
-        extractedData.courseName = "Bycking hard";
-        extractedData.ipfsHash = "bafkreice6xjseikumhlmpb7zlmhlzz2phhek4776apjk6pks6aagmz7po4";
-        
-        // También intentar extraer certificateId si no se encontró
-        if (certificateLog && certificateLog.topics && certificateLog.topics.length > 1) {
-          extractedData.certificateId = certificateLog.topics[1];
         }
       }
 
@@ -393,7 +316,6 @@ export default function Home() {
         throw new Error('No se encontró un certificado en esta transacción');
       }
 
-      // 5. Crear objeto con datos del certificado
       const certificateData = {
         issuer: receipt.from || "0x...",
         recipientName: extractedData.studentName,
@@ -405,13 +327,12 @@ export default function Home() {
         transactionHash: transactionHash,
         blockNumber: parseInt(receipt.blockNumber, 16),
         contractAddress: CONTRACT_ADDRESS,
-        rawInputData: inputData // Para depuración
+        rawInputData: inputData
       };
 
       console.log("✅ Certificado procesado:", certificateData);
 
-      // 6. Verificar el certificado (opcional)
-      let isVerified = true; // Asumimos válido por ahora
+      let isVerified = true;
 
       setResult({
         isValid: isVerified,
@@ -420,7 +341,6 @@ export default function Home() {
         isVerified: isVerified
       });
 
-      // 7. Guardar en historial
       const newSearch = {
         hash: transactionHash,
         studentName: certificateData.recipientName,
@@ -448,11 +368,6 @@ export default function Home() {
     setLoading(false);
   };
 
-  const useExampleTransaction = () => {
-    setTransactionHash(EXAMPLE_TRANSACTION_HASH);
-    setTimeout(() => findCertificateByTransactionHash(), 100);
-  };
-
   const retryVerification = () => {
     setResult(null);
     findCertificateByTransactionHash();
@@ -463,7 +378,7 @@ export default function Home() {
     localStorage.removeItem('certificateSearchHistory');
   };
 
-  // ========== ESTILOS (IGUALES) ==========
+  // ========== ESTILOS ==========
 
   const styles = {
     container: {
@@ -524,6 +439,7 @@ export default function Home() {
       transition: 'border-color 0.3s'
     },
     button: {
+      width: '100%',
       padding: '15px 30px',
       background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
       color: 'white',
@@ -532,21 +448,6 @@ export default function Home() {
       fontSize: '16px',
       fontWeight: '600',
       cursor: 'pointer',
-      marginRight: '10px',
-      marginBottom: '10px',
-      transition: 'all 0.3s'
-    },
-    exampleButton: {
-      padding: '15px 30px',
-      background: '#f3f4f6',
-      color: '#374151',
-      border: '2px solid #d1d5db',
-      borderRadius: '10px',
-      fontSize: '16px',
-      fontWeight: '600',
-      cursor: 'pointer',
-      marginRight: '10px',
-      marginBottom: '10px',
       transition: 'all 0.3s'
     },
     resultCard: {
@@ -616,9 +517,9 @@ export default function Home() {
     }}>
       <div style={styles.container}>
         <header style={styles.header}>
-          <h1 style={styles.h1}>🔍 Verificador de Certificados Públicos</h1>
+          <h1 style={styles.h1}>🔍 Verificador de Certificados</h1>
           <p style={styles.subtitle}>
-            Verifica certificados en <strong>Sonic Testnet</strong> sin necesidad de wallet
+            Verifica certificados en <strong>Sonic Testnet</strong>
           </p>
           
           <div style={styles.networkStatus}>
@@ -659,7 +560,7 @@ export default function Home() {
         </header>
 
         <main>
-          {/* SECCIÓN DE BÚSQUEDA */}
+          {/* SECCIÓN DE BÚSQUEDA - SIN BOTÓN DE EJEMPLO */}
           <div style={styles.inputSection}>
             <div style={{marginBottom: '20px'}}>
               <label htmlFor="transactionHash" style={{
@@ -681,79 +582,131 @@ export default function Home() {
               />
             </div>
             
-            <div style={{display: 'flex', flexWrap: 'wrap', gap: '10px'}}>
-              <button 
-                onClick={findCertificateByTransactionHash}
-                disabled={loading}
-                style={{
-                  ...styles.button,
-                  opacity: loading ? 0.6 : 1,
-                  cursor: loading ? 'not-allowed' : 'pointer'
-                }}
-                onMouseOver={(e) => {
-                  if (!loading) {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 5px 15px rgba(16, 185, 129, 0.4)';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              >
-                {loading ? (
-                  <>
-                    <span style={{
-                      display: 'inline-block',
-                      width: '16px',
-                      height: '16px',
-                      border: '2px solid rgba(255,255,255,0.3)',
-                      borderTopColor: 'white',
-                      borderRadius: '50%',
-                      animation: 'spin 1s linear infinite',
-                      marginRight: '8px'
-                    }}></span>
-                    Buscando...
-                  </>
-                ) : '✅ Buscar Certificado'}
-              </button>
-              
-              <button 
-                onClick={useExampleTransaction}
-                style={{
-                  ...styles.exampleButton,
-                  cursor: 'pointer'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.background = '#e5e7eb';
+            <button 
+              onClick={findCertificateByTransactionHash}
+              disabled={loading || !transactionHash.trim()}
+              style={{
+                ...styles.button,
+                opacity: (loading || !transactionHash.trim()) ? 0.6 : 1,
+                cursor: (loading || !transactionHash.trim()) ? 'not-allowed' : 'pointer'
+              }}
+              onMouseOver={(e) => {
+                if (!loading && transactionHash.trim()) {
                   e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.background = '#f3f4f6';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-              >
-                Usar Ejemplo (Jorge Blajos)
-              </button>
-            </div>
-            
-            <div style={{marginTop: '15px', fontSize: '0.9em', color: '#666'}}>
-              <p style={{marginBottom: '5px'}}><strong>💡 Ejemplo para probar:</strong></p>
-              <code style={{
-                display: 'block',
-                background: '#f1f5f9',
-                padding: '10px',
-                borderRadius: '6px',
-                fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                fontSize: '0.85em',
-                wordBreak: 'break-all',
-                marginBottom: '5px'
-              }}>
-                {EXAMPLE_TRANSACTION_HASH}
-              </code>
-              <p style={{fontSize: '0.8em'}}><em>Transacción de Jorge Blajos - Bycking hard</em></p>
-            </div>
+                  e.currentTarget.style.boxShadow = '0 5px 15px rgba(16, 185, 129, 0.4)';
+                }
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
+              {loading ? (
+                <>
+                  <span style={{
+                    display: 'inline-block',
+                    width: '16px',
+                    height: '16px',
+                    border: '2px solid rgba(255,255,255,0.3)',
+                    borderTopColor: 'white',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite',
+                    marginRight: '8px'
+                  }}></span>
+                  Buscando...
+                </>
+              ) : '✅ Verificar Certificado'}
+            </button>
           </div>
+
+          {/* HISTORIAL DE BÚSQUEDAS */}
+          {searchHistory.length > 0 && (
+            <div style={{
+              background: '#f8fafc',
+              padding: '20px',
+              borderRadius: '15px',
+              marginBottom: '20px',
+              border: '2px solid #e2e8f0'
+            }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '15px'
+              }}>
+                <h3 style={{color: '#2d3748', fontSize: '1.2em'}}>📚 Historial de Búsquedas</h3>
+                <button 
+                  onClick={clearHistory}
+                  style={{
+                    background: '#fee2e2',
+                    color: '#dc2626',
+                    border: 'none',
+                    padding: '8px 16px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '0.9em',
+                    fontWeight: '600'
+                  }}
+                >
+                  Limpiar Historial
+                </button>
+              </div>
+              
+              <div>
+                {searchHistory.slice(0, 5).map((item, index) => (
+                  <div 
+                    key={index}
+                    onClick={() => {
+                      setTransactionHash(item.hash);
+                      findCertificateByTransactionHash();
+                    }}
+                    style={{
+                      background: 'white',
+                      padding: '12px 16px',
+                      marginBottom: '8px',
+                      borderRadius: '8px',
+                      borderLeft: '4px solid #10b981',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.transform = 'translateX(5px)';
+                      e.currentTarget.style.boxShadow = '0 5px 15px rgba(0,0,0,0.1)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.transform = 'translateX(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    <div>
+                      <div style={{fontWeight: '600', color: '#1f2937'}}>
+                        {item.studentName || 'Sin nombre'}
+                      </div>
+                      <div style={{fontSize: '0.9em', color: '#6b7280'}}>
+                        {item.courseName || 'Sin curso'}
+                      </div>
+                    </div>
+                    <div style={{textAlign: 'right'}}>
+                      <div style={{
+                        fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+                        fontSize: '0.8em',
+                        color: '#9ca3af',
+                        marginBottom: '4px'
+                      }}>
+                        {item.hash.substring(0, 8)}...{item.hash.substring(58)}
+                      </div>
+                      <div style={{fontSize: '0.8em', color: '#9ca3af'}}>
+                        {new Date(item.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* LOADING */}
           {loading && (
@@ -769,7 +722,7 @@ export default function Home() {
               }}></div>
               <p style={{color: '#4b5563', fontWeight: '600'}}>Buscando certificado en blockchain...</p>
               <p style={{color: '#6b7280', fontSize: '0.9em', marginTop: '10px'}}>
-                Consultando Sonic Testnet para la transacción: {transactionHash.substring(0, 20)}...
+                Consultando Sonic Testnet...
               </p>
             </div>
           )}
@@ -799,7 +752,6 @@ export default function Home() {
               </div>
               
               <div style={{marginBottom: '25px'}}>
-                {/* NOMBRE DEL ESTUDIANTE */}
                 <div style={styles.detailRow}>
                   <div style={styles.detailLabel}>👤 Estudiante:</div>
                   <div style={{
@@ -812,7 +764,6 @@ export default function Home() {
                   </div>
                 </div>
                 
-                {/* NOMBRE DEL CURSO */}
                 <div style={styles.detailRow}>
                   <div style={styles.detailLabel}>🎓 Curso/Evento:</div>
                   <div style={{
@@ -824,7 +775,6 @@ export default function Home() {
                   </div>
                 </div>
                 
-                {/* CID DEL PDF - SOLO SI EXISTE */}
                 {result.certificateData.arweaveHash && isLikelyCID(result.certificateData.arweaveHash) && (
                   <div style={styles.detailRow}>
                     <div style={styles.detailLabel}>📄 Certificado PDF:</div>
@@ -875,9 +825,8 @@ export default function Home() {
                   </div>
                 )}
                 
-                {/* HASH DE TRANSACCIÓN */}
                 <div style={styles.detailRow}>
-                  <div style={styles.detailLabel}>📫 Transacción:</div>
+                  <div style={styles.detailLabel}>📫 Hash de Transacción:</div>
                   <div style={{
                     ...styles.detailValue,
                     fontFamily: "'SF Mono', Monaco, Consolas, monospace",
@@ -892,7 +841,6 @@ export default function Home() {
                 </div>
               </div>
               
-              {/* VERIFICACIÓN EN BLOCKCHAIN */}
               <div style={{
                 background: 'rgba(255,255,255,0.8)',
                 padding: '20px',
@@ -969,33 +917,6 @@ export default function Home() {
                   </a>
                 </div>
               </div>
-              
-              {/* BOTÓN PARA VER DATOS DE DEPURACIÓN */}
-              {result.certificateData.rawInputData && (
-                <div style={{marginTop: '20px'}}>
-                  <button
-                    onClick={() => {
-                      console.log("📊 DATOS COMPLETOS PARA DEPURACIÓN:", {
-                        certificateData: result.certificateData,
-                        inputData: result.certificateData.rawInputData,
-                        extractedCID: result.certificateData.arweaveHash
-                      });
-                      alert("Datos de depuración mostrados en consola (F12)");
-                    }}
-                    style={{
-                      padding: '8px 16px',
-                      background: '#6b7280',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontSize: '0.9em',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    🐛 Ver datos de depuración en consola
-                  </button>
-                </div>
-              )}
             </div>
           ) : result && result.error ? (
             <div style={styles.errorCard}>
@@ -1073,6 +994,72 @@ export default function Home() {
               </div>
             </div>
           ) : null}
+
+          {/* INFORMACIÓN DEL SISTEMA */}
+          <div style={{
+            marginTop: '40px',
+            paddingTop: '20px',
+            borderTop: '2px solid #e5e7eb'
+          }}>
+            <h3 style={{
+              color: '#2d3748',
+              fontSize: '1.3em',
+              marginBottom: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}>
+              <span>🔧</span>
+              <span>Información del Sistema</span>
+            </h3>
+            
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+              gap: '15px',
+              background: '#f8fafc',
+              padding: '20px',
+              borderRadius: '10px'
+            }}>
+              <div>
+                <strong style={{color: '#4b5563'}}>Red Blockchain:</strong>
+                <div style={{marginTop: '5px', fontWeight: '600'}}>Sonic Testnet</div>
+              </div>
+              
+              <div>
+                <strong style={{color: '#4b5563'}}>ChainID:</strong>
+                <div style={{
+                  marginTop: '5px',
+                  fontWeight: '600',
+                  fontFamily: "'SF Mono', Monaco, Consolas, monospace"
+                }}>14601</div>
+              </div>
+              
+              <div>
+                <strong style={{color: '#4b5563'}}>Contrato de Certificados:</strong>
+                <div style={{
+                  marginTop: '5px',
+                  fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+                  fontSize: '0.9em',
+                  wordBreak: 'break-all'
+                }}>
+                  {CONTRACT_ADDRESS}
+                </div>
+              </div>
+              
+              <div>
+                <strong style={{color: '#4b5563'}}>RPC Endpoint:</strong>
+                <div style={{
+                  marginTop: '5px',
+                  fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+                  fontSize: '0.9em',
+                  wordBreak: 'break-all'
+                }}>
+                  {SONIC_RPC_URL}
+                </div>
+              </div>
+            </div>
+          </div>
         </main>
       </div>
       
