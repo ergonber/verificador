@@ -190,7 +190,7 @@ export default function Home() {
         const decodedAllData = hexToString(allDataHex);
         
         // Buscar patrones de texto
-    /*    if (decodedAllData.includes('Jorge Blajos')) {
+        if (decodedAllData.includes('Jorge Blajos')) {
           result.studentName = "Jorge Blajos";
         }
         if (decodedAllData.includes('Bycking hard')) {
