@@ -196,7 +196,7 @@ export default function Home() {
         if (decodedAllData.includes('Bycking hard')) {
           result.courseName = "Bycking hard";
         }
-      }*/
+      }
       
     } catch (error) {
       console.error("❌ Error en extractCertificateDataFromLog:", error);
@@ -737,7 +737,23 @@ export default function Home() {
               </button>
             </div>
             
-       
+            <div style={{marginTop: '15px', fontSize: '0.9em', color: '#666'}}>
+              <p style={{marginBottom: '5px'}}><strong>💡 Ejemplo para probar:</strong></p>
+              <code style={{
+                display: 'block',
+                background: '#f1f5f9',
+                padding: '10px',
+                borderRadius: '6px',
+                fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+                fontSize: '0.85em',
+                wordBreak: 'break-all',
+                marginBottom: '5px'
+              }}>
+                {EXAMPLE_TRANSACTION_HASH}
+              </code>
+              <p style={{fontSize: '0.8em'}}><em>Transacción de Jorge Blajos - Bycking hard</em></p>
+            </div>
+          </div>
 
           {/* LOADING */}
           {loading && (
@@ -853,7 +869,7 @@ export default function Home() {
                         color: '#6b7280',
                         fontStyle: 'italic'
                       }}>
-                        Almacenado en Pinata IPFS EL DATO DEL CID DEBE COINCIDIR CON LA URL QUE MUESTRA EL CERTIFICADO EN LINEA
+                        Almacenado en Pinata IPFS
                       </div>
                     </div>
                   </div>
