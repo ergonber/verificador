@@ -869,7 +869,7 @@ export default function Home() {
                         color: '#6b7280',
                         fontStyle: 'italic'
                       }}>
-                        Almacenado en Pinata IPFS
+                        Almacenado en Pinata IPFS EL DATO DEL CID DEBE COINCIDIR CON LA URL QUE MUESTRA EL CERTIFICADO EN LINEA
                       </div>
                     </div>
                   </div>
