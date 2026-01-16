@@ -1,5 +1,6 @@
-// pages/index.js - VERIFICADOR COMPLETO SIN BOTÓN DE EJEMPLO
 import { useState, useEffect } from 'react';
+import Head from 'next/head';
+import Link from 'next/link';
 
 export default function Home() {
   const [transactionHash, setTransactionHash] = useState('');
@@ -15,7 +16,6 @@ export default function Home() {
 
   // ========== FUNCIONES AUXILIARES ==========
 
-  // Función para convertir hex a string
   const hexToString = (hex) => {
     try {
       let str = '';
@@ -32,7 +32,6 @@ export default function Home() {
     }
   };
 
-  // Función para extraer datos específicos del contrato
   const extractDataFromInput = (inputData) => {
     console.log("🔍 Analizando input data:", inputData);
     
@@ -87,7 +86,6 @@ export default function Home() {
     return result;
   };
 
-  // Función para extraer datos del log
   const extractCertificateDataFromLog = (log, inputData) => {
     console.log("🔍 Extrayendo datos del log:", log);
     
@@ -507,597 +505,636 @@ export default function Home() {
     }
   };
 
-  // ========== RENDER ==========
-
   return (
-    <div style={{
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '20px',
-      minHeight: '100vh'
-    }}>
-      <div style={styles.container}>
-        <header style={styles.header}>
-          <h1 style={styles.h1}>🔍 Verificador de Certificados</h1>
-          <p style={styles.subtitle}>
-            Verifica certificados en <strong>Sonic Testnet</strong>
-          </p>
-          
-          <div style={styles.networkStatus}>
-            <span style={{
-              display: 'inline-block',
-              width: '10px',
-              height: '10px',
-              borderRadius: '50%',
-              marginRight: '8px',
-              background: networkStatus === 'connected' ? '#10b981' : 
-                         networkStatus === 'disconnected' ? '#ef4444' : '#f59e0b',
-              animation: networkStatus === 'checking' ? 'pulse 1s infinite' : 'none'
-            }}></span>
-            
-            {networkStatus === 'checking' && 'Conectando a Sonic Testnet...'}
-            {networkStatus === 'connected' && '✅ CONECTADO A SONIC TESTNET'}
-            {networkStatus === 'disconnected' && (
-              <>
-                ❌ ERROR DE CONEXIÓN
-                <button 
-                  onClick={checkNetworkStatus}
-                  style={{
-                    marginLeft: '10px',
-                    padding: '4px 12px',
-                    background: '#3b82f6',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '0.9em'
-                  }}
-                >
-                  Reintentar
-                </button>
-              </>
-            )}
-          </div>
-        </header>
+    <>
+      <Head>
+        <title>Verificador de Certificados - Sonic Testnet</title>
+        <meta name="description" content="Verifica certificados en la blockchain de Sonic Testnet" />
+        <link rel="icon" href="/favicon.ico" />
+      </Head>
 
-        <main>
-          {/* SECCIÓN DE BÚSQUEDA - SIN BOTÓN DE EJEMPLO */}
-          <div style={styles.inputSection}>
-            <div style={{marginBottom: '20px'}}>
-              <label htmlFor="transactionHash" style={{
-                display: 'block',
-                fontWeight: '600',
-                marginBottom: '8px',
-                color: '#2d3748'
-              }}>
-                Hash de la Transacción:
-              </label>
-              <input
-                id="transactionHash"
-                type="text"
-                placeholder="Ingresa el hash de la transacción (0x...)"
-                value={transactionHash}
-                onChange={(e) => setTransactionHash(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && findCertificateByTransactionHash()}
-                style={styles.input}
-              />
+      <div style={{
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        padding: '20px',
+        minHeight: '100vh'
+      }}>
+        <div style={styles.container}>
+          <header style={styles.header}>
+            <h1 style={styles.h1}>🔍 Verificador de Certificados</h1>
+            <p style={styles.subtitle}>
+              Verifica certificados en <strong>Sonic Testnet</strong>
+            </p>
+            
+            <div style={{marginTop: '20px', display: 'flex', gap: '15px', justifyContent: 'center', flexWrap: 'wrap'}}>
+              <Link href="/verify-qr" legacyBehavior>
+                <a style={{
+                  padding: '12px 24px',
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                  color: 'white',
+                  textDecoration: 'none',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  📱 Verificar con QR
+                </a>
+              </Link>
+              <Link href="/create" legacyBehavior>
+                <a style={{
+                  padding: '12px 24px',
+                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                  color: 'white',
+                  textDecoration: 'none',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  🎓 Crear Certificado
+                </a>
+              </Link>
             </div>
             
-            <button 
-              onClick={findCertificateByTransactionHash}
-              disabled={loading || !transactionHash.trim()}
-              style={{
-                ...styles.button,
-                opacity: (loading || !transactionHash.trim()) ? 0.6 : 1,
-                cursor: (loading || !transactionHash.trim()) ? 'not-allowed' : 'pointer'
-              }}
-              onMouseOver={(e) => {
-                if (!loading && transactionHash.trim()) {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = '0 5px 15px rgba(16, 185, 129, 0.4)';
-                }
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-            >
-              {loading ? (
-                <>
-                  <span style={{
-                    display: 'inline-block',
-                    width: '16px',
-                    height: '16px',
-                    border: '2px solid rgba(255,255,255,0.3)',
-                    borderTopColor: 'white',
-                    borderRadius: '50%',
-                    animation: 'spin 1s linear infinite',
-                    marginRight: '8px'
-                  }}></span>
-                  Buscando...
-                </>
-              ) : '✅ Verificar Certificado'}
-            </button>
-          </div>
-
-          {/* HISTORIAL DE BÚSQUEDAS */}
-          {searchHistory.length > 0 && (
-            <div style={{
-              background: '#f8fafc',
-              padding: '20px',
-              borderRadius: '15px',
-              marginBottom: '20px',
-              border: '2px solid #e2e8f0'
-            }}>
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '15px'
-              }}>
-                <h3 style={{color: '#2d3748', fontSize: '1.2em'}}>📚 Historial de Búsquedas</h3>
-                <button 
-                  onClick={clearHistory}
-                  style={{
-                    background: '#fee2e2',
-                    color: '#dc2626',
-                    border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.9em',
-                    fontWeight: '600'
-                  }}
-                >
-                  Limpiar Historial
-                </button>
-              </div>
+            <div style={styles.networkStatus}>
+              <span style={{
+                display: 'inline-block',
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                marginRight: '8px',
+                background: networkStatus === 'connected' ? '#10b981' : 
+                           networkStatus === 'disconnected' ? '#ef4444' : '#f59e0b',
+                animation: networkStatus === 'checking' ? 'pulse 1s infinite' : 'none'
+              }}></span>
               
-              <div>
-                {searchHistory.slice(0, 5).map((item, index) => (
-                  <div 
-                    key={index}
-                    onClick={() => {
-                      setTransactionHash(item.hash);
-                      findCertificateByTransactionHash();
-                    }}
+              {networkStatus === 'checking' && 'Conectando a Sonic Testnet...'}
+              {networkStatus === 'connected' && '✅ CONECTADO A SONIC TESTNET'}
+              {networkStatus === 'disconnected' && (
+                <>
+                  ❌ ERROR DE CONEXIÓN
+                  <button 
+                    onClick={checkNetworkStatus}
                     style={{
-                      background: 'white',
-                      padding: '12px 16px',
-                      marginBottom: '8px',
-                      borderRadius: '8px',
-                      borderLeft: '4px solid #10b981',
+                      marginLeft: '10px',
+                      padding: '4px 12px',
+                      background: '#3b82f6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
                       cursor: 'pointer',
-                      transition: 'all 0.3s',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.transform = 'translateX(5px)';
-                      e.currentTarget.style.boxShadow = '0 5px 15px rgba(0,0,0,0.1)';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.transform = 'translateX(0)';
-                      e.currentTarget.style.boxShadow = 'none';
+                      fontSize: '0.9em'
                     }}
                   >
-                    <div>
-                      <div style={{fontWeight: '600', color: '#1f2937'}}>
-                        {item.studentName || 'Sin nombre'}
-                      </div>
-                      <div style={{fontSize: '0.9em', color: '#6b7280'}}>
-                        {item.courseName || 'Sin curso'}
-                      </div>
-                    </div>
-                    <div style={{textAlign: 'right'}}>
-                      <div style={{
-                        fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                        fontSize: '0.8em',
-                        color: '#9ca3af',
-                        marginBottom: '4px'
-                      }}>
-                        {item.hash.substring(0, 8)}...{item.hash.substring(58)}
-                      </div>
-                      <div style={{fontSize: '0.8em', color: '#9ca3af'}}>
-                        {new Date(item.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                    Reintentar
+                  </button>
+                </>
+              )}
             </div>
-          )}
+          </header>
 
-          {/* LOADING */}
-          {loading && (
-            <div style={styles.loading}>
-              <div style={{
-                width: '60px',
-                height: '60px',
-                border: '5px solid #e2e8f0',
-                borderTopColor: '#667eea',
-                borderRadius: '50%',
-                animation: 'spin 1s linear infinite',
-                margin: '0 auto 20px'
-              }}></div>
-              <p style={{color: '#4b5563', fontWeight: '600'}}>Buscando certificado en blockchain...</p>
-              <p style={{color: '#6b7280', fontSize: '0.9em', marginTop: '10px'}}>
-                Consultando Sonic Testnet...
-              </p>
-            </div>
-          )}
-
-          {/* RESULTADO - CERTIFICADO ENCONTRADO */}
-          {result && result.found && result.isValid ? (
-            <div style={styles.resultCard}>
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '25px',
-                paddingBottom: '15px',
-                borderBottom: '2px solid rgba(16, 185, 129, 0.3)'
-              }}>
-                <h2 style={{color: '#065f46', fontSize: '1.8em'}}>🎉 CERTIFICADO ENCONTRADO</h2>
-                <div style={{
-                  background: '#059669',
-                  color: 'white',
-                  padding: '10px 20px',
-                  borderRadius: '50px',
+          <main>
+            {/* SECCIÓN DE BÚSQUEDA */}
+            <div style={styles.inputSection}>
+              <div style={{marginBottom: '20px'}}>
+                <label htmlFor="transactionHash" style={{
+                  display: 'block',
                   fontWeight: '600',
-                  fontSize: '1.1em'
+                  marginBottom: '8px',
+                  color: '#2d3748'
                 }}>
-                  ✅ VÁLIDO
-                </div>
+                  Hash de la Transacción:
+                </label>
+                <input
+                  id="transactionHash"
+                  type="text"
+                  placeholder="Ingresa el hash de la transacción (0x...)"
+                  value={transactionHash}
+                  onChange={(e) => setTransactionHash(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && findCertificateByTransactionHash()}
+                  style={styles.input}
+                />
               </div>
               
-              <div style={{marginBottom: '25px'}}>
-                <div style={styles.detailRow}>
-                  <div style={styles.detailLabel}>👤 Estudiante:</div>
-                  <div style={{
-                    ...styles.detailValue,
-                    fontSize: '1.2em',
-                    fontWeight: '600',
-                    color: '#1f2937'
-                  }}>
-                    {result.certificateData.recipientName}
-                  </div>
-                </div>
-                
-                <div style={styles.detailRow}>
-                  <div style={styles.detailLabel}>🎓 Curso/Evento:</div>
-                  <div style={{
-                    ...styles.detailValue,
-                    fontSize: '1.1em',
-                    fontWeight: '500'
-                  }}>
-                    {result.certificateData.eventName}
-                  </div>
-                </div>
-                
-                {result.certificateData.arweaveHash && isLikelyCID(result.certificateData.arweaveHash) && (
-                  <div style={styles.detailRow}>
-                    <div style={styles.detailLabel}>📄 Certificado PDF:</div>
-                    <div style={styles.detailValue}>
-                      <button 
-                        onClick={() => openPDFFromCID(result.certificateData.arweaveHash)}
-                        style={styles.pdfButton}
-                        onMouseOver={(e) => {
-                          e.currentTarget.style.transform = 'translateY(-2px)';
-                          e.currentTarget.style.boxShadow = '0 5px 15px rgba(102, 126, 234, 0.4)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.currentTarget.style.transform = 'translateY(0)';
-                          e.currentTarget.style.boxShadow = 'none';
-                        }}
-                      >
-                        <span>📥</span>
-                        Ver Certificado PDF
-                        <span style={{
-                          marginLeft: '8px',
-                          background: 'rgba(255,255,255,0.2)',
-                          padding: '2px 8px',
-                          borderRadius: '12px',
-                          fontSize: '0.85em'
-                        }}>
-                          IPFS
-                        </span>
-                      </button>
-                      
-                      <div style={{
-                        marginTop: '8px',
-                        fontSize: '0.85em',
-                        color: '#4b5563',
-                        fontFamily: "'SF Mono', Monaco, Consolas, monospace"
-                      }}>
-                        CID: {formatCID(result.certificateData.arweaveHash)}
-                      </div>
-                      
-                      <div style={{
-                        marginTop: '5px',
-                        fontSize: '0.8em',
-                        color: '#6b7280',
-                        fontStyle: 'italic'
-                      }}>
-                        Almacenado en Pinata IPFS, REVISE QUE ESTE CODIGO COINCIDA CON LA URL QUE MUESTRA EL CERTIFICADO¡¡¡¡
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                <div style={styles.detailRow}>
-                  <div style={styles.detailLabel}>📫 Hash de Transacción:</div>
-                  <div style={{
-                    ...styles.detailValue,
-                    fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                    fontSize: '0.9em',
-                    background: 'rgba(255,255,255,0.5)',
-                    padding: '8px',
-                    borderRadius: '6px',
-                    wordBreak: 'break-all'
-                  }}>
-                    {result.certificateData.transactionHash}
-                  </div>
-                </div>
-              </div>
-              
+              <button 
+                onClick={findCertificateByTransactionHash}
+                disabled={loading || !transactionHash.trim()}
+                style={{
+                  ...styles.button,
+                  opacity: (loading || !transactionHash.trim()) ? 0.6 : 1,
+                  cursor: (loading || !transactionHash.trim()) ? 'not-allowed' : 'pointer'
+                }}
+                onMouseOver={(e) => {
+                  if (!loading && transactionHash.trim()) {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 5px 15px rgba(16, 185, 129, 0.4)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                {loading ? (
+                  <>
+                    <span style={{
+                      display: 'inline-block',
+                      width: '16px',
+                      height: '16px',
+                      border: '2px solid rgba(255,255,255,0.3)',
+                      borderTopColor: 'white',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite',
+                      marginRight: '8px'
+                    }}></span>
+                    Buscando...
+                  </>
+                ) : '✅ Verificar Certificado'}
+              </button>
+            </div>
+
+            {/* HISTORIAL DE BÚSQUEDAS */}
+            {searchHistory.length > 0 && (
               <div style={{
-                background: 'rgba(255,255,255,0.8)',
+                background: '#f8fafc',
                 padding: '20px',
-                borderRadius: '10px',
-                border: '2px solid #bae6fd'
+                borderRadius: '15px',
+                marginBottom: '20px',
+                border: '2px solid #e2e8f0'
               }}>
                 <div style={{
-                  color: '#0369a1',
-                  fontWeight: '600',
-                  fontSize: '1.1em',
-                  marginBottom: '15px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '15px'
+                }}>
+                  <h3 style={{color: '#2d3748', fontSize: '1.2em'}}>📚 Historial de Búsquedas</h3>
+                  <button 
+                    onClick={clearHistory}
+                    style={{
+                      background: '#fee2e2',
+                      color: '#dc2626',
+                      border: 'none',
+                      padding: '8px 16px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.9em',
+                      fontWeight: '600'
+                    }}
+                  >
+                    Limpiar Historial
+                  </button>
+                </div>
+                
+                <div>
+                  {searchHistory.slice(0, 5).map((item, index) => (
+                    <div 
+                      key={index}
+                      onClick={() => {
+                        setTransactionHash(item.hash);
+                        findCertificateByTransactionHash();
+                      }}
+                      style={{
+                        background: 'white',
+                        padding: '12px 16px',
+                        marginBottom: '8px',
+                        borderRadius: '8px',
+                        borderLeft: '4px solid #10b981',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.transform = 'translateX(5px)';
+                        e.currentTarget.style.boxShadow = '0 5px 15px rgba(0,0,0,0.1)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.transform = 'translateX(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                      <div>
+                        <div style={{fontWeight: '600', color: '#1f2937'}}>
+                          {item.studentName || 'Sin nombre'}
+                        </div>
+                        <div style={{fontSize: '0.9em', color: '#6b7280'}}>
+                          {item.courseName || 'Sin curso'}
+                        </div>
+                      </div>
+                      <div style={{textAlign: 'right'}}>
+                        <div style={{
+                          fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+                          fontSize: '0.8em',
+                          color: '#9ca3af',
+                          marginBottom: '4px'
+                        }}>
+                          {item.hash.substring(0, 8)}...{item.hash.substring(58)}
+                        </div>
+                        <div style={{fontSize: '0.8em', color: '#9ca3af'}}>
+                          {new Date(item.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* LOADING */}
+            {loading && (
+              <div style={styles.loading}>
+                <div style={{
+                  width: '60px',
+                  height: '60px',
+                  border: '5px solid #e2e8f0',
+                  borderTopColor: '#667eea',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                  margin: '0 auto 20px'
+                }}></div>
+                <p style={{color: '#4b5563', fontWeight: '600'}}>Buscando certificado en blockchain...</p>
+                <p style={{color: '#6b7280', fontSize: '0.9em', marginTop: '10px'}}>
+                  Consultando Sonic Testnet...
+                </p>
+              </div>
+            )}
+
+            {/* RESULTADO - CERTIFICADO ENCONTRADO */}
+            {result && result.found && result.isValid ? (
+              <div style={styles.resultCard}>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '25px',
+                  paddingBottom: '15px',
+                  borderBottom: '2px solid rgba(16, 185, 129, 0.3)'
+                }}>
+                  <h2 style={{color: '#065f46', fontSize: '1.8em'}}>🎉 CERTIFICADO ENCONTRADO</h2>
+                  <div style={{
+                    background: '#059669',
+                    color: 'white',
+                    padding: '10px 20px',
+                    borderRadius: '50px',
+                    fontWeight: '600',
+                    fontSize: '1.1em'
+                  }}>
+                    ✅ VÁLIDO
+                  </div>
+                </div>
+                
+                <div style={{marginBottom: '25px'}}>
+                  <div style={styles.detailRow}>
+                    <div style={styles.detailLabel}>👤 Estudiante:</div>
+                    <div style={{
+                      ...styles.detailValue,
+                      fontSize: '1.2em',
+                      fontWeight: '600',
+                      color: '#1f2937'
+                    }}>
+                      {result.certificateData.recipientName}
+                    </div>
+                  </div>
+                  
+                  <div style={styles.detailRow}>
+                    <div style={styles.detailLabel}>🎓 Curso/Evento:</div>
+                    <div style={{
+                      ...styles.detailValue,
+                      fontSize: '1.1em',
+                      fontWeight: '500'
+                    }}>
+                      {result.certificateData.eventName}
+                    </div>
+                  </div>
+                  
+                  {result.certificateData.arweaveHash && isLikelyCID(result.certificateData.arweaveHash) && (
+                    <div style={styles.detailRow}>
+                      <div style={styles.detailLabel}>📄 Certificado PDF:</div>
+                      <div style={styles.detailValue}>
+                        <button 
+                          onClick={() => openPDFFromCID(result.certificateData.arweaveHash)}
+                          style={styles.pdfButton}
+                          onMouseOver={(e) => {
+                            e.currentTarget.style.transform = 'translateY(-2px)';
+                            e.currentTarget.style.boxShadow = '0 5px 15px rgba(102, 126, 234, 0.4)';
+                          }}
+                          onMouseOut={(e) => {
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = 'none';
+                          }}
+                        >
+                          <span>📥</span>
+                          Ver Certificado PDF
+                          <span style={{
+                            marginLeft: '8px',
+                            background: 'rgba(255,255,255,0.2)',
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            fontSize: '0.85em'
+                          }}>
+                            IPFS
+                          </span>
+                        </button>
+                        
+                        <div style={{
+                          marginTop: '8px',
+                          fontSize: '0.85em',
+                          color: '#4b5563',
+                          fontFamily: "'SF Mono', Monaco, Consolas, monospace"
+                        }}>
+                          CID: {formatCID(result.certificateData.arweaveHash)}
+                        </div>
+                        
+                        <div style={{
+                          marginTop: '5px',
+                          fontSize: '0.8em',
+                          color: '#6b7280',
+                          fontStyle: 'italic'
+                        }}>
+                          Almacenado en Pinata IPFS
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div style={styles.detailRow}>
+                    <div style={styles.detailLabel}>📫 Hash de Transacción:</div>
+                    <div style={{
+                      ...styles.detailValue,
+                      fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+                      fontSize: '0.9em',
+                      background: 'rgba(255,255,255,0.5)',
+                      padding: '8px',
+                      borderRadius: '6px',
+                      wordBreak: 'break-all'
+                    }}>
+                      {result.certificateData.transactionHash}
+                    </div>
+                  </div>
+                </div>
+                
+                <div style={{
+                  background: 'rgba(255,255,255,0.8)',
+                  padding: '20px',
+                  borderRadius: '10px',
+                  border: '2px solid #bae6fd'
+                }}>
+                  <div style={{
+                    color: '#0369a1',
+                    fontWeight: '600',
+                    fontSize: '1.1em',
+                    marginBottom: '15px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px'
+                  }}>
+                    <span>🔗</span>
+                    <span>Verificado en Blockchain</span>
+                  </div>
+                  
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: '15px',
+                    fontSize: '0.95em'
+                  }}>
+                    <div>
+                      <strong>Red:</strong> Sonic Testnet
+                    </div>
+                    <div>
+                      <strong>ChainID:</strong> 14601
+                    </div>
+                    <div>
+                      <strong>Block:</strong> {result.certificateData.blockNumber}
+                    </div>
+                    <div>
+                      <strong>Contrato:</strong>{' '}
+                      <span style={{
+                        fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+                        fontSize: '0.9em'
+                      }}>
+                        {CONTRACT_ADDRESS.slice(0, 10)}...{CONTRACT_ADDRESS.slice(-8)}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div style={{marginTop: '15px'}}>
+                    <a 
+                      href={`${SONIC_EXPLORER}/${result.certificateData.transactionHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        color: '#3b82f6',
+                        textDecoration: 'none',
+                        fontWeight: '600',
+                        padding: '10px 15px',
+                        background: 'rgba(59, 130, 246, 0.1)',
+                        borderRadius: '8px',
+                        transition: 'all 0.3s'
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }}
+                    >
+                      <span>🔍</span>
+                      Ver transacción en Sonic Explorer
+                    </a>
+                  </div>
+                </div>
+              </div>
+            ) : result && result.error ? (
+              <div style={styles.errorCard}>
+                <div style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '10px'
+                  gap: '10px',
+                  marginBottom: '15px'
                 }}>
-                  <span>🔗</span>
-                  <span>Verificado en Blockchain</span>
+                  <span style={{fontSize: '1.5em'}}>❌</span>
+                  <h2 style={{color: '#991b1b', fontSize: '1.5em'}}>ERROR EN LA BÚSQUEDA</h2>
                 </div>
                 
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                  gap: '15px',
+                <p style={{
+                  background: 'rgba(255,255,255,0.5)',
+                  padding: '15px',
+                  borderRadius: '8px',
+                  marginBottom: '20px',
+                  fontFamily: "'SF Mono', Monaco, Consolas, monospace",
                   fontSize: '0.95em'
                 }}>
-                  <div>
-                    <strong>Red:</strong> Sonic Testnet
-                  </div>
-                  <div>
-                    <strong>ChainID:</strong> 14601
-                  </div>
-                  <div>
-                    <strong>Block:</strong> {result.certificateData.blockNumber}
-                  </div>
-                  <div>
-                    <strong>Contrato:</strong>{' '}
-                    <span style={{
-                      fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                      fontSize: '0.9em'
-                    }}>
-                      {CONTRACT_ADDRESS.slice(0, 10)}...{CONTRACT_ADDRESS.slice(-8)}
-                    </span>
-                  </div>
-                </div>
+                  {result.error}
+                </p>
                 
-                <div style={{marginTop: '15px'}}>
-                  <a 
-                    href={`${SONIC_EXPLORER}/${result.certificateData.transactionHash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                <div style={{
+                  display: 'flex',
+                  gap: '15px',
+                  flexWrap: 'wrap'
+                }}>
+                  <button 
+                    onClick={retryVerification}
                     style={{
-                      display: 'inline-flex',
+                      padding: '12px 24px',
+                      background: '#ef4444',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '16px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      display: 'flex',
                       alignItems: 'center',
                       gap: '8px',
-                      color: '#3b82f6',
-                      textDecoration: 'none',
-                      fontWeight: '600',
-                      padding: '10px 15px',
-                      background: 'rgba(59, 130, 246, 0.1)',
-                      borderRadius: '8px',
                       transition: 'all 0.3s'
                     }}
                     onMouseOver={(e) => {
-                      e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
                       e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 5px 15px rgba(239, 68, 68, 0.4)';
                     }}
                     onMouseOut={(e) => {
-                      e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
                       e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
                     }}
                   >
-                    <span>🔍</span>
-                    Ver transacción en Sonic Explorer
-                  </a>
+                    <span>🔄</span>
+                    Reintentar Búsqueda
+                  </button>
+                  
+                  <button 
+                    onClick={() => setResult(null)}
+                    style={{
+                      padding: '12px 24px',
+                      background: '#6b7280',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '16px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s'
+                    }}
+                  >
+                    Limpiar Resultado
+                  </button>
                 </div>
               </div>
-            </div>
-          ) : result && result.error ? (
-            <div style={styles.errorCard}>
-              <div style={{
+            ) : null}
+
+            {/* INFORMACIÓN DEL SISTEMA */}
+            <div style={{
+              marginTop: '40px',
+              paddingTop: '20px',
+              borderTop: '2px solid #e5e7eb'
+            }}>
+              <h3 style={{
+                color: '#2d3748',
+                fontSize: '1.3em',
+                marginBottom: '20px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
-                marginBottom: '15px'
+                gap: '10px'
               }}>
-                <span style={{fontSize: '1.5em'}}>❌</span>
-                <h2 style={{color: '#991b1b', fontSize: '1.5em'}}>ERROR EN LA BÚSQUEDA</h2>
-              </div>
-              
-              <p style={{
-                background: 'rgba(255,255,255,0.5)',
-                padding: '15px',
-                borderRadius: '8px',
-                marginBottom: '20px',
-                fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                fontSize: '0.95em'
-              }}>
-                {result.error}
-              </p>
+                <span>🔧</span>
+                <span>Información del Sistema</span>
+              </h3>
               
               <div style={{
-                display: 'flex',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
                 gap: '15px',
-                flexWrap: 'wrap'
+                background: '#f8fafc',
+                padding: '20px',
+                borderRadius: '10px'
               }}>
-                <button 
-                  onClick={retryVerification}
-                  style={{
-                    padding: '12px 24px',
-                    background: '#ef4444',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '16px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    transition: 'all 0.3s'
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 5px 15px rgba(239, 68, 68, 0.4)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                >
-                  <span>🔄</span>
-                  Reintentar Búsqueda
-                </button>
+                <div>
+                  <strong style={{color: '#4b5563'}}>Red Blockchain:</strong>
+                  <div style={{marginTop: '5px', fontWeight: '600'}}>Sonic Testnet</div>
+                </div>
                 
-                <button 
-                  onClick={() => setResult(null)}
-                  style={{
-                    padding: '12px 24px',
-                    background: '#6b7280',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '16px',
+                <div>
+                  <strong style={{color: '#4b5563'}}>ChainID:</strong>
+                  <div style={{
+                    marginTop: '5px',
                     fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s'
-                  }}
-                >
-                  Limpiar Resultado
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {/* INFORMACIÓN DEL SISTEMA */}
-          <div style={{
-            marginTop: '40px',
-            paddingTop: '20px',
-            borderTop: '2px solid #e5e7eb'
-          }}>
-            <h3 style={{
-              color: '#2d3748',
-              fontSize: '1.3em',
-              marginBottom: '20px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px'
-            }}>
-              <span>🔧</span>
-              <span>Información del Sistema</span>
-            </h3>
-            
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-              gap: '15px',
-              background: '#f8fafc',
-              padding: '20px',
-              borderRadius: '10px'
-            }}>
-              <div>
-                <strong style={{color: '#4b5563'}}>Red Blockchain:</strong>
-                <div style={{marginTop: '5px', fontWeight: '600'}}>Sonic Testnet</div>
-              </div>
-              
-              <div>
-                <strong style={{color: '#4b5563'}}>ChainID:</strong>
-                <div style={{
-                  marginTop: '5px',
-                  fontWeight: '600',
-                  fontFamily: "'SF Mono', Monaco, Consolas, monospace"
-                }}>14601</div>
-              </div>
-              
-              <div>
-                <strong style={{color: '#4b5563'}}>Contrato de Certificados:</strong>
-                <div style={{
-                  marginTop: '5px',
-                  fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                  fontSize: '0.9em',
-                  wordBreak: 'break-all'
-                }}>
-                  {CONTRACT_ADDRESS}
+                    fontFamily: "'SF Mono', Monaco, Consolas, monospace"
+                  }}>14601</div>
                 </div>
-              </div>
-              
-              <div>
-                <strong style={{color: '#4b5563'}}>RPC Endpoint:</strong>
-                <div style={{
-                  marginTop: '5px',
-                  fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                  fontSize: '0.9em',
-                  wordBreak: 'break-all'
-                }}>
-                  {SONIC_RPC_URL}
+                
+                <div>
+                  <strong style={{color: '#4b5563'}}>Contrato de Certificados:</strong>
+                  <div style={{
+                    marginTop: '5px',
+                    fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+                    fontSize: '0.9em',
+                    wordBreak: 'break-all'
+                  }}>
+                    {CONTRACT_ADDRESS}
+                  </div>
+                </div>
+                
+                <div>
+                  <strong style={{color: '#4b5563'}}>RPC Endpoint:</strong>
+                  <div style={{
+                    marginTop: '5px',
+                    fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+                    fontSize: '0.9em',
+                    wordBreak: 'break-all'
+                  }}>
+                    {SONIC_RPC_URL}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </main>
+          </main>
+        </div>
+        
+        {/* ESTILOS GLOBALES */}
+        <style jsx global>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+          }
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+          }
+          input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+          }
+          button:disabled {
+            cursor: not-allowed;
+          }
+          a:hover {
+            text-decoration: underline;
+          }
+          ::selection {
+            background: rgba(102, 126, 234, 0.3);
+            color: #000;
+          }
+        `}</style>
       </div>
-      
-      {/* ESTILOS GLOBALES */}
-      <style jsx global>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-        * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
-        }
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          min-height: 100vh;
-        }
-        input:focus {
-          outline: none;
-          border-color: #667eea;
-          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-        button:disabled {
-          cursor: not-allowed;
-        }
-        a:hover {
-          text-decoration: underline;
-        }
-        ::selection {
-          background: rgba(102, 126, 234, 0.3);
-          color: #000;
-        }
-      `}</style>
-    </div>
+    </>
   );
 }
