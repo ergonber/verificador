@@ -1,5 +1,6 @@
-// pages/index.js - VERIFICADOR CON LECTOR QR
+// pages/index.js - VERIFICADOR AUTOMÁTICO CON QR
 import { useState, useEffect, useRef } from 'react';
+import jsQR from 'jsqr';
 
 export default function Home() {
   const [transactionHash, setTransactionHash] = useState('');
@@ -8,41 +9,68 @@ export default function Home() {
   const [networkStatus, setNetworkStatus] = useState('checking');
   const [searchHistory, setSearchHistory] = useState([]);
   const [showQRScanner, setShowQRScanner] = useState(false);
+  const [qrScanning, setQrScanning] = useState(false);
+  const [autoVerification, setAutoVerification] = useState(false);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const animationFrameRef = useRef(null);
 
   // CONFIGURACIÓN
   const CONTRACT_ADDRESS = "0xAe48Ed8cD53e6e595E857872b1ac338E17F08549";
   const SONIC_RPC_URL = "https://rpc.testnet.soniclabs.com";
   const SONIC_EXPLORER = "https://testnet.soniclabs.com/tx";
 
-  // ========== FUNCIONES QR SCANNER ==========
+  // ========== VERIFICACIÓN AUTOMÁTICA AL CARGAR ==========
+  useEffect(() => {
+    // Leer parámetros de la URL al cargar la página
+    const urlParams = new URLSearchParams(window.location.search);
+    const txFromUrl = urlParams.get('tx') || urlParams.get('hash') || urlParams.get('transaction');
+    
+    if (txFromUrl) {
+      console.log('📥 Hash detectado en URL:', txFromUrl);
+      setTransactionHash(txFromUrl);
+      setAutoVerification(true);
+      
+      // Esperar un momento y verificar automáticamente
+      setTimeout(() => {
+        if (validateTransactionHash(txFromUrl) === null) {
+          console.log('✅ Verificando automáticamente...');
+          findCertificateByTransactionHash();
+        }
+      }, 1500);
+    }
+  }, []);
 
-  // Iniciar escáner QR
+  // ========== FUNCIONES QR SCANNER SIMPLIFICADAS ==========
+
   const startQRScanner = async () => {
     try {
       setShowQRScanner(true);
+      setQrScanning(true);
       
-      // Esperar un momento para que el DOM se actualice
       await new Promise(resolve => setTimeout(resolve, 100));
       
       const video = videoRef.current;
       const canvas = canvasRef.current;
       
       if (!video || !canvas) {
-        throw new Error('Elementos de video o canvas no encontrados');
+        throw new Error('Elementos no encontrados');
       }
       
-      // Solicitar acceso a la cámara
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: 'environment' } 
       });
       
       video.srcObject = stream;
-      video.play();
       
-      // Iniciar detección de QR
-      scanQRCode(video, canvas);
+      await new Promise(resolve => {
+        video.onloadedmetadata = () => {
+          video.play();
+          resolve();
+        };
+      });
+      
+      scanQRCode();
       
     } catch (error) {
       console.error('Error iniciando escáner QR:', error);
@@ -51,9 +79,14 @@ export default function Home() {
     }
   };
 
-  // Detener escáner QR
   const stopQRScanner = () => {
     setShowQRScanner(false);
+    setQrScanning(false);
+    
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
     
     const video = videoRef.current;
     if (video && video.srcObject) {
@@ -64,152 +97,119 @@ export default function Home() {
     }
   };
 
-  // Función para escanear código QR
-  const scanQRCode = (video, canvas) => {
+  const scanQRCode = () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    
+    if (!video || !canvas || !qrScanning) {
+      return;
+    }
+    
     const context = canvas.getContext('2d');
     
     const scanFrame = () => {
-      if (!showQRScanner || !video.videoWidth) {
+      if (!showQRScanner || !qrScanning || !video.videoWidth) {
         return;
       }
       
-      // Dibujar el frame de video en el canvas
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
       
-      // Obtener datos de la imagen
       const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
       
-      // Intentar decodificar QR (usando librería simple)
-      try {
-        // Método simple para decodificar - en producción usarías una librería como jsQR
-        const qrData = decodeQRSimple(imageData);
-        
-        if (qrData) {
-          console.log('QR detectado:', qrData);
-          processQRData(qrData);
-          return;
-        }
-      } catch (error) {
-        console.log('Error decodificando QR:', error);
+      if (code) {
+        console.log('QR detectado:', code.data);
+        processQRData(code.data);
+        return;
       }
       
-      // Continuar escaneando
-      requestAnimationFrame(scanFrame);
+      animationFrameRef.current = requestAnimationFrame(scanFrame);
     };
     
-    requestAnimationFrame(scanFrame);
+    animationFrameRef.current = requestAnimationFrame(scanFrame);
   };
 
-  // Decodificador simple de QR (para demostración)
-  const decodeQRSimple = (imageData) => {
-    // Esta es una versión simplificada. En producción, usarías una librería como:
-    // import jsQR from 'jsqr';
+  // FUNCIÓN SIMPLIFICADA PARA EXTRAER SOLO HASH DE TRANSACCIÓN
+  const extractTransactionHash = (qrData) => {
+    console.log('Extrayendo hash de QR:', qrData);
     
-    // Por ahora, simulamos detección basada en patrones simples
-    const data = imageData.data;
+    // 1. Si es solo el hash (0x...64)
+    if (qrData.startsWith('0x') && qrData.length === 66) {
+      return qrData;
+    }
     
-    // Buscar patrones que podrían ser URLs de IPFS
-    // En realidad necesitarías una librería de QR proper
+    // 2. Si es una URL con parámetros
+    if (qrData.startsWith('http')) {
+      try {
+        const url = new URL(qrData);
+        const params = new URLSearchParams(url.search);
+        const tx = params.get('tx') || params.get('hash') || params.get('transaction');
+        
+        if (tx && tx.startsWith('0x') && tx.length === 66) {
+          return tx;
+        }
+        
+        // También buscar en la ruta
+        const pathMatch = qrData.match(/\/tx\/(0x[a-fA-F0-9]{64})/);
+        if (pathMatch && pathMatch[1]) {
+          return pathMatch[1];
+        }
+        
+      } catch (e) {
+        console.log('No es URL válida:', e);
+      }
+    }
     
+    // 3. Buscar hash en el texto
+    const hashPattern = /(0x[a-fA-F0-9]{64})/g;
+    const matches = qrData.match(hashPattern);
+    
+    if (matches && matches.length > 0) {
+      return matches[0]; // Devolver el primer hash encontrado
+    }
+    
+    // 4. Si no se encuentra, devolver null
     return null;
   };
 
-  // Procesar datos del QR
   const processQRData = (qrData) => {
     try {
-      console.log('Procesando datos QR:', qrData);
+      console.log('Procesando QR:', qrData);
       
-      // Detener el escáner
-      stopQRScanner();
+      // Extraer hash de transacción
+      const extractedHash = extractTransactionHash(qrData);
       
-      // Extraer CID de diferentes formatos de QR
-      let cid = extractCIDFromQR(qrData);
-      
-      if (cid) {
-        // Buscar transacción por CID en blockchain
-        searchTransactionByCID(cid);
+      if (extractedHash) {
+        console.log('✅ Hash extraído:', extractedHash);
+        
+        // Detener escáner
+        stopQRScanner();
+        
+        // Poner en el campo
+        setTransactionHash(extractedHash);
+        
+        // Verificar automáticamente después de 1 segundo
+        setTimeout(() => {
+          console.log('🔍 Verificando automáticamente...');
+          findCertificateByTransactionHash();
+        }, 1000);
+        
       } else {
-        alert('No se pudo extraer un CID válido del código QR');
+        alert('❌ No se encontró un hash de transacción válido en el QR.\n\nEl QR debe contener: 0x... (64 caracteres)');
+        stopQRScanner();
       }
       
     } catch (error) {
       console.error('Error procesando QR:', error);
       alert('Error procesando código QR');
+      stopQRScanner();
     }
   };
 
-  // Extraer CID del contenido del QR
-  const extractCIDFromQR = (qrData) => {
-    // El QR puede contener:
-    // 1. URL completa de Pinata: https://gateway.pinata.cloud/ipfs/Qm...
-    // 2. Solo el CID: Qm... o bafy...
-    // 3. URL IPFS: ipfs://Qm...
-    
-    console.log('Extrayendo CID de:', qrData);
-    
-    // Patrones comunes
-    const patterns = [
-      /gateway\.pinata\.cloud\/ipfs\/([a-zA-Z0-9]+)/,
-      /ipfs:\/\/([a-zA-Z0-9]+)/,
-      /\/([a-zA-Z0-9]{46,})/,
-      /(Qm[1-9A-HJ-NP-Za-km-z]{44})/,
-      /(bafy[a-zA-Z0-9]{50,})/
-    ];
-    
-    for (const pattern of patterns) {
-      const match = qrData.match(pattern);
-      if (match && match[1]) {
-        console.log('CID encontrado con patrón:', match[1]);
-        return match[1];
-      }
-    }
-    
-    // Si no se encontró con patrones, devolver el texto completo si parece CID
-    if (qrData.startsWith('Qm') && qrData.length === 46) {
-      return qrData;
-    }
-    
-    if (qrData.startsWith('bafy') && qrData.length > 50) {
-      return qrData;
-    }
-    
-    return null;
-  };
-
-  // Buscar transacción por CID en blockchain
-  const searchTransactionByCID = async (cid) => {
-    setLoading(true);
-    
-    try {
-      console.log('🔍 Buscando transacción para CID:', cid);
-      
-      // Aquí necesitarías una manera de mapear CID → transactionHash
-      // Esto depende de cómo almacenes la relación CID-transacción
-      
-      // Método 1: Si tienes una base de datos o API
-      // const response = await fetch(`/api/find-transaction?cid=${cid}`);
-      
-      // Método 2: Buscar en logs de eventos (más complejo)
-      // Por ahora, mostraremos un mensaje
-      
-      alert(`CID detectado: ${cid}\n\nEsta función necesita implementación para buscar la transacción asociada en blockchain.`);
-      
-      // Por ahora, solo mostramos el CID en el campo
-      setTransactionHash(cid);
-      
-    } catch (error) {
-      console.error('Error buscando transacción:', error);
-      alert('Error buscando transacción asociada al CID');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ========== FUNCIONES AUXILIARES (MANTENIDAS) ==========
-
-  // Función para convertir hex a string
+  // ========== FUNCIONES AUXILIARES ==========
+  
   const hexToString = (hex) => {
     try {
       let str = '';
@@ -226,7 +226,6 @@ export default function Home() {
     }
   };
 
-  // Función para extraer datos específicos del contrato
   const extractDataFromInput = (inputData) => {
     console.log("🔍 Analizando input data:", inputData);
     
@@ -281,7 +280,6 @@ export default function Home() {
     return result;
   };
 
-  // Función para extraer datos del log
   const extractCertificateDataFromLog = (log, inputData) => {
     console.log("🔍 Extrayendo datos del log:", log);
     
@@ -376,12 +374,6 @@ export default function Home() {
 
   const validateTransactionHash = (hash) => {
     if (!hash) return 'Ingresa un hash de transacción';
-    
-    // Aceptar tanto hashes de transacción como CIDs
-    if (hash.startsWith('Qm') || hash.startsWith('baf')) {
-      return null; // Es un CID, no un hash de transacción
-    }
-    
     if (hash.length !== 66) return 'Hash debe tener 66 caracteres (0x + 64 caracteres)';
     if (!hash.startsWith('0x')) return 'Hash debe comenzar con 0x';
     if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) return 'Hash contiene caracteres inválidos';
@@ -407,7 +399,6 @@ export default function Home() {
   }, [searchHistory]);
 
   useEffect(() => {
-    // Limpiar recursos cuando se desmonte el componente
     return () => {
       stopQRScanner();
     };
@@ -441,8 +432,7 @@ export default function Home() {
     }
   };
 
-  // ========== FUNCIÓN PRINCIPAL ==========
-
+  // ========== FUNCIÓN PRINCIPAL DE VERIFICACIÓN ==========
   const findCertificateByTransactionHash = async () => {
     const validationError = validateTransactionHash(transactionHash);
     if (validationError) {
@@ -454,8 +444,10 @@ export default function Home() {
     
     setLoading(true);
     setResult(null);
+    setAutoVerification(false);
 
     try {
+      // 1. Obtener la transacción
       const txResponse = await fetch(SONIC_RPC_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -468,15 +460,16 @@ export default function Home() {
       });
 
       const txData = await txResponse.json();
-      console.log("📋 Transacción completa:", txData);
+      console.log("📋 Transacción:", txData);
 
       if (!txData.result) {
-        throw new Error('Transacción no encontrada');
+        throw new Error('Transacción no encontrada en Sonic Testnet');
       }
 
       const transaction = txData.result;
       const inputData = transaction.input || "";
 
+      // 2. Obtener el receipt
       const receiptResponse = await fetch(SONIC_RPC_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -491,12 +484,13 @@ export default function Home() {
       const receiptData = await receiptResponse.json();
       
       if (!receiptData.result) {
-        throw new Error('No se pudo obtener el receipt');
+        throw new Error('No se pudo obtener el receipt de la transacción');
       }
 
       const receipt = receiptData.result;
-      console.log("📋 Receipt obtenido:", receipt);
+      console.log("📋 Receipt:", receipt);
 
+      // 3. Buscar logs del contrato
       let certificateLog = null;
       let extractedData = {
         studentName: "Estudiante",
@@ -523,6 +517,7 @@ export default function Home() {
         throw new Error('No se encontró un certificado en esta transacción');
       }
 
+      // 4. Crear objeto de certificado
       const certificateData = {
         issuer: receipt.from || "0x...",
         recipientName: extractedData.studentName,
@@ -539,15 +534,15 @@ export default function Home() {
 
       console.log("✅ Certificado procesado:", certificateData);
 
-      let isVerified = true;
-
+      // 5. Mostrar resultado
       setResult({
-        isValid: isVerified,
+        isValid: true,
         certificateData: certificateData,
         found: true,
-        isVerified: isVerified
+        isVerified: true
       });
 
+      // 6. Guardar en historial
       const newSearch = {
         hash: transactionHash,
         studentName: certificateData.recipientName,
@@ -555,7 +550,7 @@ export default function Home() {
         timestamp: Date.now(),
         cid: certificateData.arweaveHash,
         isValid: true,
-        isVerified: isVerified
+        isVerified: true
       };
       
       setSearchHistory(prev => {
@@ -585,8 +580,12 @@ export default function Home() {
     localStorage.removeItem('certificateSearchHistory');
   };
 
-  // ========== ESTILOS ==========
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    alert('Copiado al portapapeles');
+  };
 
+  // ========== ESTILOS ==========
   const styles = {
     container: {
       maxWidth: '1200px',
@@ -673,7 +672,18 @@ export default function Home() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: '10px'
+      gap: '10px',
+      marginBottom: '10px'
+    },
+    autoVerificationBadge: {
+      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+      color: 'white',
+      padding: '10px 20px',
+      borderRadius: '50px',
+      fontWeight: '600',
+      marginBottom: '15px',
+      textAlign: 'center',
+      animation: 'pulse 2s infinite'
     },
     qrScannerOverlay: {
       position: 'fixed',
@@ -699,7 +709,8 @@ export default function Home() {
     qrVideo: {
       width: '100%',
       borderRadius: '10px',
-      marginBottom: '20px'
+      marginBottom: '20px',
+      background: '#000'
     },
     closeButton: {
       position: 'absolute',
@@ -715,14 +726,16 @@ export default function Home() {
       cursor: 'pointer',
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'center'
+      justifyContent: 'center',
+      zIndex: 1001
     },
     resultCard: {
       background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
       padding: '25px',
       borderRadius: '15px',
       marginTop: '20px',
-      border: '2px solid #10b981'
+      border: '2px solid #10b981',
+      animation: 'slideIn 0.5s ease-out'
     },
     errorCard: {
       background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
@@ -730,7 +743,8 @@ export default function Home() {
       borderRadius: '15px',
       marginTop: '20px',
       border: '2px solid #ef4444',
-      color: '#991b1b'
+      color: '#991b1b',
+      animation: 'slideIn 0.5s ease-out'
     },
     detailRow: {
       display: 'flex',
@@ -763,6 +777,21 @@ export default function Home() {
       transition: 'all 0.3s',
       display: 'flex',
       alignItems: 'center',
+      gap: '10px',
+      marginRight: '10px'
+    },
+    copyButton: {
+      padding: '12px 24px',
+      background: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
+      color: 'white',
+      border: 'none',
+      borderRadius: '10px',
+      fontSize: '16px',
+      fontWeight: '600',
+      cursor: 'pointer',
+      transition: 'all 0.3s',
+      display: 'flex',
+      alignItems: 'center',
       gap: '10px'
     },
     loading: {
@@ -775,7 +804,6 @@ export default function Home() {
   };
 
   // ========== RENDER ==========
-
   return (
     <div style={{
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -786,7 +814,7 @@ export default function Home() {
         <header style={styles.header}>
           <h1 style={styles.h1}>🔍 Verificador de Certificados</h1>
           <p style={styles.subtitle}>
-            Verifica certificados en <strong>Sonic Testnet</strong>
+            Escanea el QR del certificado para verificar su autenticidad en <strong>Sonic Testnet</strong>
           </p>
           
           <div style={styles.networkStatus}>
@@ -827,7 +855,14 @@ export default function Home() {
         </header>
 
         <main>
-          {/* SECCIÓN DE BÚSQUEDA CON QR */}
+          {/* BADGE DE VERIFICACIÓN AUTOMÁTICA */}
+          {autoVerification && !result && (
+            <div style={styles.autoVerificationBadge}>
+              ⚡ VERIFICACIÓN AUTOMÁTICA EN PROCESO...
+            </div>
+          )}
+
+          {/* SECCIÓN DE BÚSQUEDA */}
           <div style={styles.inputSection}>
             <div style={{marginBottom: '20px'}}>
               <label htmlFor="transactionHash" style={{
@@ -841,22 +876,29 @@ export default function Home() {
               <input
                 id="transactionHash"
                 type="text"
-                placeholder="Ingresa el hash de la transacción (0x...) o escanea QR"
+                placeholder="0xfe078480207ea526ac82c8d1a45f50d1a747653203a3d5693e9d4793e737d536"
                 value={transactionHash}
                 onChange={(e) => setTransactionHash(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && findCertificateByTransactionHash()}
                 style={styles.input}
               />
+              <div style={{
+                fontSize: '0.9em',
+                color: '#6b7280',
+                marginTop: '5px'
+              }}>
+                Escanea el QR o ingresa el hash de la transacción
+              </div>
             </div>
             
             {/* BOTÓN PARA ESCANEAR QR */}
             <button 
               onClick={startQRScanner}
               style={styles.qrButton}
-              disabled={showQRScanner}
+              disabled={showQRScanner || loading}
             >
               <span>📷</span>
-              Escanear Código QR
+              {showQRScanner ? 'Escaneando...' : 'Escanear QR del Certificado'}
             </button>
             
             {/* BOTÓN PARA VERIFICAR */}
@@ -891,7 +933,7 @@ export default function Home() {
                     animation: 'spin 1s linear infinite',
                     marginRight: '8px'
                   }}></span>
-                  Buscando...
+                  {autoVerification ? 'Verificando automáticamente...' : 'Buscando en blockchain...'}
                 </>
               ) : '✅ Verificar Certificado'}
             </button>
@@ -908,12 +950,12 @@ export default function Home() {
                   ×
                 </button>
                 
-                <h3 style={{textAlign: 'center', marginBottom: '20px', color: '#1f2937'}}>
-                  📷 Escanea el Código QR
+                <h3 style={{textAlign: 'center', marginBottom: '15px', color: '#1f2937'}}>
+                  📷 Escanea el QR del Certificado
                 </h3>
                 
-                <p style={{textAlign: 'center', marginBottom: '20px', color: '#6b7280'}}>
-                  Enfoca el código QR del certificado
+                <p style={{textAlign: 'center', marginBottom: '15px', color: '#6b7280'}}>
+                  Enfoca el código QR que contiene el hash de la transacción
                 </p>
                 
                 <video 
@@ -929,101 +971,27 @@ export default function Home() {
                 
                 <div style={{
                   textAlign: 'center',
-                  marginTop: '20px',
-                  color: '#9ca3af',
-                  fontSize: '0.9em'
+                  marginTop: '15px',
+                  padding: '10px',
+                  background: '#f3f4f6',
+                  borderRadius: '8px'
                 }}>
-                  El código QR debe contener el CID de Pinata o la URL del certificado
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* HISTORIAL DE BÚSQUEDAS */}
-          {searchHistory.length > 0 && (
-            <div style={{
-              background: '#f8fafc',
-              padding: '20px',
-              borderRadius: '15px',
-              marginBottom: '20px',
-              border: '2px solid #e2e8f0'
-            }}>
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '15px'
-              }}>
-                <h3 style={{color: '#2d3748', fontSize: '1.2em'}}>📚 Historial de Búsquedas</h3>
-                <button 
-                  onClick={clearHistory}
-                  style={{
-                    background: '#fee2e2',
-                    color: '#dc2626',
-                    border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.9em',
-                    fontWeight: '600'
-                  }}
-                >
-                  Limpiar Historial
-                </button>
-              </div>
-              
-              <div>
-                {searchHistory.slice(0, 5).map((item, index) => (
-                  <div 
-                    key={index}
-                    onClick={() => {
-                      setTransactionHash(item.hash);
-                      findCertificateByTransactionHash();
-                    }}
-                    style={{
-                      background: 'white',
-                      padding: '12px 16px',
-                      marginBottom: '8px',
-                      borderRadius: '8px',
-                      borderLeft: '4px solid #10b981',
-                      cursor: 'pointer',
-                      transition: 'all 0.3s',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.transform = 'translateX(5px)';
-                      e.currentTarget.style.boxShadow = '0 5px 15px rgba(0,0,0,0.1)';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.transform = 'translateX(0)';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                  >
-                    <div>
-                      <div style={{fontWeight: '600', color: '#1f2937'}}>
-                        {item.studentName || 'Sin nombre'}
-                      </div>
-                      <div style={{fontSize: '0.9em', color: '#6b7280'}}>
-                        {item.courseName || 'Sin curso'}
-                      </div>
-                    </div>
-                    <div style={{textAlign: 'right'}}>
-                      <div style={{
-                        fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                        fontSize: '0.8em',
-                        color: '#9ca3af',
-                        marginBottom: '4px'
-                      }}>
-                        {item.hash.substring(0, 8)}...{item.hash.substring(58)}
-                      </div>
-                      <div style={{fontSize: '0.8em', color: '#9ca3af'}}>
-                        {new Date(item.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                      </div>
-                    </div>
+                  <div style={{
+                    color: '#4b5563',
+                    fontSize: '0.9em'
+                  }}>
+                    El QR debe contener el hash de la transacción:
                   </div>
-                ))}
+                  <div style={{
+                    fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+                    fontSize: '0.8em',
+                    color: '#374151',
+                    marginTop: '5px',
+                    wordBreak: 'break-all'
+                  }}>
+                    0xfe078480207ea526ac82c8d1a45f50d1a747653203a3d5693e9d4793e737d536
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1040,7 +1008,9 @@ export default function Home() {
                 animation: 'spin 1s linear infinite',
                 margin: '0 auto 20px'
               }}></div>
-              <p style={{color: '#4b5563', fontWeight: '600'}}>Buscando certificado en blockchain...</p>
+              <p style={{color: '#4b5563', fontWeight: '600'}}>
+                {autoVerification ? 'Verificando certificado automáticamente...' : 'Buscando certificado en blockchain...'}
+              </p>
               <p style={{color: '#6b7280', fontSize: '0.9em', marginTop: '10px'}}>
                 Consultando Sonic Testnet...
               </p>
@@ -1058,7 +1028,7 @@ export default function Home() {
                 paddingBottom: '15px',
                 borderBottom: '2px solid rgba(16, 185, 129, 0.3)'
               }}>
-                <h2 style={{color: '#065f46', fontSize: '1.8em'}}>🎉 CERTIFICADO ENCONTRADO</h2>
+                <h2 style={{color: '#065f46', fontSize: '1.8em'}}>🎉 CERTIFICADO VERIFICADO</h2>
                 <div style={{
                   background: '#059669',
                   color: 'white',
@@ -1067,7 +1037,7 @@ export default function Home() {
                   fontWeight: '600',
                   fontSize: '1.1em'
                 }}>
-                  ✅ VÁLIDO
+                  ✅ AUTÉNTICO
                 </div>
               </div>
               
@@ -1099,64 +1069,75 @@ export default function Home() {
                   <div style={styles.detailRow}>
                     <div style={styles.detailLabel}>📄 Certificado PDF:</div>
                     <div style={styles.detailValue}>
-                      <button 
-                        onClick={() => openPDFFromCID(result.certificateData.arweaveHash)}
-                        style={styles.pdfButton}
-                        onMouseOver={(e) => {
-                          e.currentTarget.style.transform = 'translateY(-2px)';
-                          e.currentTarget.style.boxShadow = '0 5px 15px rgba(102, 126, 234, 0.4)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.currentTarget.style.transform = 'translateY(0)';
-                          e.currentTarget.style.boxShadow = 'none';
-                        }}
-                      >
-                        <span>📥</span>
-                        Ver Certificado PDF
-                        <span style={{
-                          marginLeft: '8px',
-                          background: 'rgba(255,255,255,0.2)',
-                          padding: '2px 8px',
-                          borderRadius: '12px',
-                          fontSize: '0.85em'
-                        }}>
-                          IPFS
-                        </span>
-                      </button>
-                      
+                      <div style={{display: 'flex', gap: '10px', marginBottom: '10px'}}>
+                        <button 
+                          onClick={() => openPDFFromCID(result.certificateData.arweaveHash)}
+                          style={styles.pdfButton}
+                        >
+                          <span>📥</span>
+                          Ver Certificado
+                        </button>
+                        <button 
+                          onClick={() => copyToClipboard(result.certificateData.arweaveHash)}
+                          style={styles.copyButton}
+                        >
+                          <span>📋</span>
+                          Copiar CID
+                        </button>
+                      </div>
                       <div style={{
-                        marginTop: '8px',
                         fontSize: '0.85em',
                         color: '#4b5563',
-                        fontFamily: "'SF Mono', Monaco, Consolas, monospace"
+                        fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+                        background: 'rgba(255,255,255,0.5)',
+                        padding: '8px',
+                        borderRadius: '6px',
+                        wordBreak: 'break-all'
                       }}>
-                        CID: {formatCID(result.certificateData.arweaveHash)}
-                      </div>
-                      
-                      <div style={{
-                        marginTop: '5px',
-                        fontSize: '0.8em',
-                        color: '#6b7280',
-                        fontStyle: 'italic'
-                      }}>
-                        Almacenado en Pinata IPFS
+                        {formatCID(result.certificateData.arweaveHash)}
                       </div>
                     </div>
                   </div>
                 )}
                 
                 <div style={styles.detailRow}>
-                  <div style={styles.detailLabel}>📫 Hash de Transacción:</div>
-                  <div style={{
-                    ...styles.detailValue,
-                    fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                    fontSize: '0.9em',
-                    background: 'rgba(255,255,255,0.5)',
-                    padding: '8px',
-                    borderRadius: '6px',
-                    wordBreak: 'break-all'
-                  }}>
-                    {result.certificateData.transactionHash}
+                  <div style={styles.detailLabel}>🔗 Hash de Transacción:</div>
+                  <div style={styles.detailValue}>
+                    <div style={{
+                      fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+                      fontSize: '0.9em',
+                      background: 'rgba(255,255,255,0.5)',
+                      padding: '8px',
+                      borderRadius: '6px',
+                      wordBreak: 'break-all',
+                      marginBottom: '10px'
+                    }}>
+                      {result.certificateData.transactionHash}
+                    </div>
+                    <div style={{display: 'flex', gap: '10px'}}>
+                      <button 
+                        onClick={() => copyToClipboard(result.certificateData.transactionHash)}
+                        style={styles.copyButton}
+                      >
+                        <span>📋</span>
+                        Copiar Hash
+                      </button>
+                      <a 
+                        href={`${SONIC_EXPLORER}/${result.certificateData.transactionHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          ...styles.pdfButton,
+                          textDecoration: 'none',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <span>🔍</span>
+                        Ver en Explorer
+                      </a>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1177,7 +1158,7 @@ export default function Home() {
                   gap: '10px'
                 }}>
                   <span>🔗</span>
-                  <span>Verificado en Blockchain</span>
+                  <span>Verificado en Blockchain - Sonic Testnet</span>
                 </div>
                 
                 <div style={{
@@ -1186,12 +1167,6 @@ export default function Home() {
                   gap: '15px',
                   fontSize: '0.95em'
                 }}>
-                  <div>
-                    <strong>Red:</strong> Sonic Testnet
-                  </div>
-                  <div>
-                    <strong>ChainID:</strong> 14601
-                  </div>
                   <div>
                     <strong>Block:</strong> {result.certificateData.blockNumber}
                   </div>
@@ -1204,38 +1179,59 @@ export default function Home() {
                       {CONTRACT_ADDRESS.slice(0, 10)}...{CONTRACT_ADDRESS.slice(-8)}
                     </span>
                   </div>
+                  <div>
+                    <strong>Emisor:</strong>{' '}
+                    <span style={{
+                      fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+                      fontSize: '0.9em'
+                    }}>
+                      {result.certificateData.issuer.slice(0, 10)}...{result.certificateData.issuer.slice(-8)}
+                    </span>
+                  </div>
+                  <div>
+                    <strong>Fecha de verificación:</strong>{' '}
+                    {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}
+                  </div>
                 </div>
-                
-                <div style={{marginTop: '15px'}}>
-                  <a 
-                    href={`${SONIC_EXPLORER}/${result.certificateData.transactionHash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      color: '#3b82f6',
-                      textDecoration: 'none',
-                      fontWeight: '600',
-                      padding: '10px 15px',
-                      background: 'rgba(59, 130, 246, 0.1)',
-                      borderRadius: '8px',
-                      transition: 'all 0.3s'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                    }}
-                  >
-                    <span>🔍</span>
-                    Ver transacción en Sonic Explorer
-                  </a>
-                </div>
+              </div>
+              
+              {/* GENERAR NUEVO QR CON ESTE CERTIFICADO */}
+              <div style={{
+                marginTop: '20px',
+                padding: '15px',
+                background: 'rgba(255,255,255,0.9)',
+                borderRadius: '10px',
+                border: '2px solid #e5e7eb'
+              }}>
+                <h4 style={{color: '#374151', marginBottom: '10px'}}>
+                  📱 Compartir este certificado:
+                </h4>
+                <p style={{color: '#6b7280', fontSize: '0.9em', marginBottom: '10px'}}>
+                  Puedes generar un QR para que otros verifiquen este mismo certificado:
+                </p>
+                <button 
+                  onClick={() => {
+                    const verificationUrl = `https://verificador-xi.vercel.app/?tx=${result.certificateData.transactionHash}`;
+                    copyToClipboard(verificationUrl);
+                    alert(`URL copiada: ${verificationUrl}\n\nGenera un QR con esta URL para compartir.`);
+                  }}
+                  style={{
+                    padding: '10px 20px',
+                    background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <span>🔗</span>
+                  Copiar URL de Verificación
+                </button>
               </div>
             </div>
           ) : result && result.error ? (
@@ -1247,7 +1243,7 @@ export default function Home() {
                 marginBottom: '15px'
               }}>
                 <span style={{fontSize: '1.5em'}}>❌</span>
-                <h2 style={{color: '#991b1b', fontSize: '1.5em'}}>ERROR EN LA BÚSQUEDA</h2>
+                <h2 style={{color: '#991b1b', fontSize: '1.5em'}}>NO SE PUDO VERIFICAR</h2>
               </div>
               
               <p style={{
@@ -1282,17 +1278,9 @@ export default function Home() {
                     gap: '8px',
                     transition: 'all 0.3s'
                   }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 5px 15px rgba(239, 68, 68, 0.4)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
                 >
                   <span>🔄</span>
-                  Reintentar Búsqueda
+                  Reintentar
                 </button>
                 
                 <button 
@@ -1309,77 +1297,11 @@ export default function Home() {
                     transition: 'all 0.3s'
                   }}
                 >
-                  Limpiar Resultado
+                  Limpiar
                 </button>
               </div>
             </div>
           ) : null}
-
-          {/* INFORMACIÓN DEL SISTEMA */}
-          <div style={{
-            marginTop: '40px',
-            paddingTop: '20px',
-            borderTop: '2px solid #e5e7eb'
-          }}>
-            <h3 style={{
-              color: '#2d3748',
-              fontSize: '1.3em',
-              marginBottom: '20px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px'
-            }}>
-              <span>🔧</span>
-              <span>Información del Sistema</span>
-            </h3>
-            
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-              gap: '15px',
-              background: '#f8fafc',
-              padding: '20px',
-              borderRadius: '10px'
-            }}>
-              <div>
-                <strong style={{color: '#4b5563'}}>Red Blockchain:</strong>
-                <div style={{marginTop: '5px', fontWeight: '600'}}>Sonic Testnet</div>
-              </div>
-              
-              <div>
-                <strong style={{color: '#4b5563'}}>ChainID:</strong>
-                <div style={{
-                  marginTop: '5px',
-                  fontWeight: '600',
-                  fontFamily: "'SF Mono', Monaco, Consolas, monospace"
-                }}>14601</div>
-              </div>
-              
-              <div>
-                <strong style={{color: '#4b5563'}}>Contrato de Certificados:</strong>
-                <div style={{
-                  marginTop: '5px',
-                  fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                  fontSize: '0.9em',
-                  wordBreak: 'break-all'
-                }}>
-                  {CONTRACT_ADDRESS}
-                </div>
-              </div>
-              
-              <div>
-                <strong style={{color: '#4b5563'}}>RPC Endpoint:</strong>
-                <div style={{
-                  marginTop: '5px',
-                  fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                  fontSize: '0.9em',
-                  wordBreak: 'break-all'
-                }}>
-                  {SONIC_RPC_URL}
-                </div>
-              </div>
-            </div>
-          </div>
         </main>
       </div>
       
@@ -1390,7 +1312,17 @@ export default function Home() {
         }
         @keyframes pulse {
           0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
+          50% { opacity: 0.7; }
+        }
+        @keyframes slideIn {
+          from { 
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to { 
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
         * {
           margin: 0;
