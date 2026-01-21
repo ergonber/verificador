@@ -1,5 +1,5 @@
-// pages/index.js - VERIFICADOR COMPLETO SIN BOTÓN DE EJEMPLO
-import { useState, useEffect } from 'react';
+// pages/index.js - VERIFICADOR CON LECTOR QR
+import { useState, useEffect, useRef } from 'react';
 
 export default function Home() {
   const [transactionHash, setTransactionHash] = useState('');
@@ -7,13 +7,207 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [networkStatus, setNetworkStatus] = useState('checking');
   const [searchHistory, setSearchHistory] = useState([]);
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
 
   // CONFIGURACIÓN
   const CONTRACT_ADDRESS = "0xAe48Ed8cD53e6e595E857872b1ac338E17F08549";
   const SONIC_RPC_URL = "https://rpc.testnet.soniclabs.com";
   const SONIC_EXPLORER = "https://testnet.soniclabs.com/tx";
 
-  // ========== FUNCIONES AUXILIARES ==========
+  // ========== FUNCIONES QR SCANNER ==========
+
+  // Iniciar escáner QR
+  const startQRScanner = async () => {
+    try {
+      setShowQRScanner(true);
+      
+      // Esperar un momento para que el DOM se actualice
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      
+      if (!video || !canvas) {
+        throw new Error('Elementos de video o canvas no encontrados');
+      }
+      
+      // Solicitar acceso a la cámara
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' } 
+      });
+      
+      video.srcObject = stream;
+      video.play();
+      
+      // Iniciar detección de QR
+      scanQRCode(video, canvas);
+      
+    } catch (error) {
+      console.error('Error iniciando escáner QR:', error);
+      alert('Error al acceder a la cámara. Asegúrate de permitir el acceso.');
+      stopQRScanner();
+    }
+  };
+
+  // Detener escáner QR
+  const stopQRScanner = () => {
+    setShowQRScanner(false);
+    
+    const video = videoRef.current;
+    if (video && video.srcObject) {
+      const stream = video.srcObject;
+      const tracks = stream.getTracks();
+      tracks.forEach(track => track.stop());
+      video.srcObject = null;
+    }
+  };
+
+  // Función para escanear código QR
+  const scanQRCode = (video, canvas) => {
+    const context = canvas.getContext('2d');
+    
+    const scanFrame = () => {
+      if (!showQRScanner || !video.videoWidth) {
+        return;
+      }
+      
+      // Dibujar el frame de video en el canvas
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      // Obtener datos de la imagen
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      
+      // Intentar decodificar QR (usando librería simple)
+      try {
+        // Método simple para decodificar - en producción usarías una librería como jsQR
+        const qrData = decodeQRSimple(imageData);
+        
+        if (qrData) {
+          console.log('QR detectado:', qrData);
+          processQRData(qrData);
+          return;
+        }
+      } catch (error) {
+        console.log('Error decodificando QR:', error);
+      }
+      
+      // Continuar escaneando
+      requestAnimationFrame(scanFrame);
+    };
+    
+    requestAnimationFrame(scanFrame);
+  };
+
+  // Decodificador simple de QR (para demostración)
+  const decodeQRSimple = (imageData) => {
+    // Esta es una versión simplificada. En producción, usarías una librería como:
+    // import jsQR from 'jsqr';
+    
+    // Por ahora, simulamos detección basada en patrones simples
+    const data = imageData.data;
+    
+    // Buscar patrones que podrían ser URLs de IPFS
+    // En realidad necesitarías una librería de QR proper
+    
+    return null;
+  };
+
+  // Procesar datos del QR
+  const processQRData = (qrData) => {
+    try {
+      console.log('Procesando datos QR:', qrData);
+      
+      // Detener el escáner
+      stopQRScanner();
+      
+      // Extraer CID de diferentes formatos de QR
+      let cid = extractCIDFromQR(qrData);
+      
+      if (cid) {
+        // Buscar transacción por CID en blockchain
+        searchTransactionByCID(cid);
+      } else {
+        alert('No se pudo extraer un CID válido del código QR');
+      }
+      
+    } catch (error) {
+      console.error('Error procesando QR:', error);
+      alert('Error procesando código QR');
+    }
+  };
+
+  // Extraer CID del contenido del QR
+  const extractCIDFromQR = (qrData) => {
+    // El QR puede contener:
+    // 1. URL completa de Pinata: https://gateway.pinata.cloud/ipfs/Qm...
+    // 2. Solo el CID: Qm... o bafy...
+    // 3. URL IPFS: ipfs://Qm...
+    
+    console.log('Extrayendo CID de:', qrData);
+    
+    // Patrones comunes
+    const patterns = [
+      /gateway\.pinata\.cloud\/ipfs\/([a-zA-Z0-9]+)/,
+      /ipfs:\/\/([a-zA-Z0-9]+)/,
+      /\/([a-zA-Z0-9]{46,})/,
+      /(Qm[1-9A-HJ-NP-Za-km-z]{44})/,
+      /(bafy[a-zA-Z0-9]{50,})/
+    ];
+    
+    for (const pattern of patterns) {
+      const match = qrData.match(pattern);
+      if (match && match[1]) {
+        console.log('CID encontrado con patrón:', match[1]);
+        return match[1];
+      }
+    }
+    
+    // Si no se encontró con patrones, devolver el texto completo si parece CID
+    if (qrData.startsWith('Qm') && qrData.length === 46) {
+      return qrData;
+    }
+    
+    if (qrData.startsWith('bafy') && qrData.length > 50) {
+      return qrData;
+    }
+    
+    return null;
+  };
+
+  // Buscar transacción por CID en blockchain
+  const searchTransactionByCID = async (cid) => {
+    setLoading(true);
+    
+    try {
+      console.log('🔍 Buscando transacción para CID:', cid);
+      
+      // Aquí necesitarías una manera de mapear CID → transactionHash
+      // Esto depende de cómo almacenes la relación CID-transacción
+      
+      // Método 1: Si tienes una base de datos o API
+      // const response = await fetch(`/api/find-transaction?cid=${cid}`);
+      
+      // Método 2: Buscar en logs de eventos (más complejo)
+      // Por ahora, mostraremos un mensaje
+      
+      alert(`CID detectado: ${cid}\n\nEsta función necesita implementación para buscar la transacción asociada en blockchain.`);
+      
+      // Por ahora, solo mostramos el CID en el campo
+      setTransactionHash(cid);
+      
+    } catch (error) {
+      console.error('Error buscando transacción:', error);
+      alert('Error buscando transacción asociada al CID');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ========== FUNCIONES AUXILIARES (MANTENIDAS) ==========
 
   // Función para convertir hex a string
   const hexToString = (hex) => {
@@ -182,6 +376,12 @@ export default function Home() {
 
   const validateTransactionHash = (hash) => {
     if (!hash) return 'Ingresa un hash de transacción';
+    
+    // Aceptar tanto hashes de transacción como CIDs
+    if (hash.startsWith('Qm') || hash.startsWith('baf')) {
+      return null; // Es un CID, no un hash de transacción
+    }
+    
     if (hash.length !== 66) return 'Hash debe tener 66 caracteres (0x + 64 caracteres)';
     if (!hash.startsWith('0x')) return 'Hash debe comenzar con 0x';
     if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) return 'Hash contiene caracteres inválidos';
@@ -205,6 +405,13 @@ export default function Home() {
       localStorage.setItem('certificateSearchHistory', JSON.stringify(searchHistory));
     }
   }, [searchHistory]);
+
+  useEffect(() => {
+    // Limpiar recursos cuando se desmonte el componente
+    return () => {
+      stopQRScanner();
+    };
+  }, []);
 
   const checkNetworkStatus = async () => {
     setNetworkStatus('checking');
@@ -388,7 +595,8 @@ export default function Home() {
       borderRadius: '20px',
       padding: '30px',
       boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-      minHeight: '100vh'
+      minHeight: '100vh',
+      position: 'relative'
     },
     header: {
       textAlign: 'center',
@@ -448,7 +656,66 @@ export default function Home() {
       fontSize: '16px',
       fontWeight: '600',
       cursor: 'pointer',
-      transition: 'all 0.3s'
+      transition: 'all 0.3s',
+      marginBottom: '10px'
+    },
+    qrButton: {
+      width: '100%',
+      padding: '15px 30px',
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      color: 'white',
+      border: 'none',
+      borderRadius: '10px',
+      fontSize: '16px',
+      fontWeight: '600',
+      cursor: 'pointer',
+      transition: 'all 0.3s',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '10px'
+    },
+    qrScannerOverlay: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      background: 'rgba(0, 0, 0, 0.9)',
+      zIndex: 1000,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    qrScannerContainer: {
+      width: '90%',
+      maxWidth: '500px',
+      background: 'white',
+      borderRadius: '15px',
+      padding: '20px',
+      position: 'relative'
+    },
+    qrVideo: {
+      width: '100%',
+      borderRadius: '10px',
+      marginBottom: '20px'
+    },
+    closeButton: {
+      position: 'absolute',
+      top: '10px',
+      right: '10px',
+      background: '#ef4444',
+      color: 'white',
+      border: 'none',
+      borderRadius: '50%',
+      width: '40px',
+      height: '40px',
+      fontSize: '20px',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
     },
     resultCard: {
       background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
@@ -560,7 +827,7 @@ export default function Home() {
         </header>
 
         <main>
-          {/* SECCIÓN DE BÚSQUEDA - SIN BOTÓN DE EJEMPLO */}
+          {/* SECCIÓN DE BÚSQUEDA CON QR */}
           <div style={styles.inputSection}>
             <div style={{marginBottom: '20px'}}>
               <label htmlFor="transactionHash" style={{
@@ -574,7 +841,7 @@ export default function Home() {
               <input
                 id="transactionHash"
                 type="text"
-                placeholder="Ingresa el hash de la transacción (0x...)"
+                placeholder="Ingresa el hash de la transacción (0x...) o escanea QR"
                 value={transactionHash}
                 onChange={(e) => setTransactionHash(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && findCertificateByTransactionHash()}
@@ -582,6 +849,17 @@ export default function Home() {
               />
             </div>
             
+            {/* BOTÓN PARA ESCANEAR QR */}
+            <button 
+              onClick={startQRScanner}
+              style={styles.qrButton}
+              disabled={showQRScanner}
+            >
+              <span>📷</span>
+              Escanear Código QR
+            </button>
+            
+            {/* BOTÓN PARA VERIFICAR */}
             <button 
               onClick={findCertificateByTransactionHash}
               disabled={loading || !transactionHash.trim()}
@@ -618,6 +896,48 @@ export default function Home() {
               ) : '✅ Verificar Certificado'}
             </button>
           </div>
+
+          {/* MODAL DE ESCÁNER QR */}
+          {showQRScanner && (
+            <div style={styles.qrScannerOverlay}>
+              <div style={styles.qrScannerContainer}>
+                <button 
+                  onClick={stopQRScanner}
+                  style={styles.closeButton}
+                >
+                  ×
+                </button>
+                
+                <h3 style={{textAlign: 'center', marginBottom: '20px', color: '#1f2937'}}>
+                  📷 Escanea el Código QR
+                </h3>
+                
+                <p style={{textAlign: 'center', marginBottom: '20px', color: '#6b7280'}}>
+                  Enfoca el código QR del certificado
+                </p>
+                
+                <video 
+                  ref={videoRef}
+                  style={styles.qrVideo}
+                  playsInline
+                />
+                
+                <canvas 
+                  ref={canvasRef}
+                  style={{display: 'none'}}
+                />
+                
+                <div style={{
+                  textAlign: 'center',
+                  marginTop: '20px',
+                  color: '#9ca3af',
+                  fontSize: '0.9em'
+                }}>
+                  El código QR debe contener el CID de Pinata o la URL del certificado
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* HISTORIAL DE BÚSQUEDAS */}
           {searchHistory.length > 0 && (
@@ -819,7 +1139,7 @@ export default function Home() {
                         color: '#6b7280',
                         fontStyle: 'italic'
                       }}>
-                        Almacenado en Pinata IPFS, REVISE QUE ESTE CODIGO COINCIDA CON LA URL QUE MUESTRA EL CERTIFICADO¡¡¡¡
+                        Almacenado en Pinata IPFS
                       </div>
                     </div>
                   </div>
