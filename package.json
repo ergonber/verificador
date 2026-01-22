@@ -8,11 +8,11 @@
     "start": "next start",
     "lint": "next lint"
   },
-  "dependencies": {
-    "jsqr": "^1.4.0",  // <-- Añadir esta línea
-    "next": "14.x.x",
-    "react": "^18",
-    "react-dom": "^18"
+ "dependencies": {
+    "next": "^13.x",
+    "react": "^18.x",
+    "react-dom": "^18.x",
+    "jsqr": "^1.4.0"
   },
   "devDependencies": {
     "autoprefixer": "^10.0.1",
