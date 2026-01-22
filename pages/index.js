@@ -1,6 +1,5 @@
-// pages/index.js - VERIFICADOR AUTOMÁTICO CON QR (VERSIÓN MEJORADA)
-import { useState, useEffect, useRef } from 'react';
-import jsQR from 'jsqr';
+// pages/index.js - VERIFICADOR AUTOMÁTICO (VERSIÓN RESPONSIVA)
+import { useState, useEffect } from 'react';
 
 export default function Home() {
   const [transactionHash, setTransactionHash] = useState('');
@@ -8,17 +7,30 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [networkStatus, setNetworkStatus] = useState('checking');
   const [searchHistory, setSearchHistory] = useState([]);
-  const [showQRScanner, setShowQRScanner] = useState(false);
-  const [qrScanning, setQrScanning] = useState(false);
   const [autoVerification, setAutoVerification] = useState(false);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const animationFrameRef = useRef(null);
+  const [windowWidth, setWindowWidth] = useState(0);
 
   // CONFIGURACIÓN
   const CONTRACT_ADDRESS = "0xAe48Ed8cD53e6e595E857872b1ac338E17F08549";
   const SONIC_RPC_URL = "https://rpc.testnet.soniclabs.com";
   const SONIC_EXPLORER = "https://testnet.soniclabs.com/tx";
+
+  // ========== DETECCIÓN DE ANCHO DE PANTALLA ==========
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+    
+    // Inicializar
+    handleResize();
+    
+    // Escuchar cambios
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
   // ========== VERIFICACIÓN AUTOMÁTICA MEJORADA ==========
   useEffect(() => {
@@ -112,192 +124,6 @@ export default function Home() {
     params.set('tx', hash);
     
     return `${baseURL}?${params.toString()}`;
-  };
-
-  // ========== FUNCIONES QR SCANNER ==========
-
-  const startQRScanner = async () => {
-    try {
-      setShowQRScanner(true);
-      setQrScanning(true);
-      
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      
-      if (!video || !canvas) {
-        throw new Error('Elementos no encontrados');
-      }
-      
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
-      });
-      
-      video.srcObject = stream;
-      
-      await new Promise(resolve => {
-        video.onloadedmetadata = () => {
-          video.play();
-          resolve();
-        };
-      });
-      
-      scanQRCode();
-      
-    } catch (error) {
-      console.error('Error iniciando escáner QR:', error);
-      alert('Error al acceder a la cámara. Asegúrate de permitir el acceso.');
-      stopQRScanner();
-    }
-  };
-
-  const stopQRScanner = () => {
-    setShowQRScanner(false);
-    setQrScanning(false);
-    
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    
-    const video = videoRef.current;
-    if (video && video.srcObject) {
-      const stream = video.srcObject;
-      const tracks = stream.getTracks();
-      tracks.forEach(track => track.stop());
-      video.srcObject = null;
-    }
-  };
-
-  const scanQRCode = () => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    
-    if (!video || !canvas || !qrScanning) {
-      return;
-    }
-    
-    const context = canvas.getContext('2d');
-    
-    const scanFrame = () => {
-      if (!showQRScanner || !qrScanning || !video.videoWidth) {
-        return;
-      }
-      
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height);
-      
-      if (code) {
-        console.log('QR detectado:', code.data);
-        processQRData(code.data);
-        return;
-      }
-      
-      animationFrameRef.current = requestAnimationFrame(scanFrame);
-    };
-    
-    animationFrameRef.current = requestAnimationFrame(scanFrame);
-  };
-
-  // ========== FUNCIÓN MEJORADA PARA EXTRAER HASH ==========
-  const extractTransactionHash = (qrData) => {
-    console.log('Extrayendo hash de QR:', qrData);
-    
-    if (!qrData || typeof qrData !== 'string') {
-      return null;
-    }
-    
-    // 1. Hash directo (0x...64)
-    if (qrData.startsWith('0x') && qrData.length === 66) {
-      return qrData;
-    }
-    
-    // 2. URL completa o parcial
-    if (qrData.includes('://') || qrData.startsWith('/') || qrData.includes('?')) {
-      try {
-        // Normalizar URL
-        let normalizedUrl = qrData;
-        if (!normalizedUrl.startsWith('http')) {
-          normalizedUrl = `https://${normalizedUrl}`;
-        }
-        
-        const url = new URL(normalizedUrl);
-        
-        // Buscar en parámetros
-        const paramNames = ['tx', 'hash', 'transaction', 'txHash', 'th', 'h'];
-        for (const param of paramNames) {
-          const value = url.searchParams.get(param);
-          if (value && value.startsWith('0x') && value.length === 66) {
-            return value;
-          }
-        }
-        
-        // Buscar en pathname
-        const pathMatch = url.pathname.match(/\/(0x[a-fA-F0-9]{64})\/?$/);
-        if (pathMatch) {
-          return pathMatch[1];
-        }
-        
-        // Buscar hash en cualquier parte de la URL
-        const hashPattern = /(0x[a-fA-F0-9]{64})/g;
-        const matches = qrData.match(hashPattern);
-        if (matches && matches.length > 0) {
-          return matches[0];
-        }
-        
-      } catch (e) {
-        console.log('No es URL válida, buscando hash directamente:', e);
-      }
-    }
-    
-    // 3. Buscar hash en texto plano
-    const hashPattern = /(0x[a-fA-F0-9]{64})/g;
-    const matches = qrData.match(hashPattern);
-    
-    if (matches && matches.length > 0) {
-      return matches[0];
-    }
-    
-    return null;
-  };
-
-  const processQRData = (qrData) => {
-    try {
-      console.log('Procesando QR:', qrData);
-      
-      // Extraer hash de transacción
-      const extractedHash = extractTransactionHash(qrData);
-      
-      if (extractedHash) {
-        console.log('✅ Hash extraído:', extractedHash);
-        
-        // Detener escáner
-        stopQRScanner();
-        
-        // Poner en el campo
-        setTransactionHash(extractedHash);
-        
-        // Verificar automáticamente después de 1 segundo
-        setTimeout(() => {
-          console.log('🔍 Verificando automáticamente...');
-          findCertificateByTransactionHash();
-        }, 1000);
-        
-      } else {
-        alert('❌ No se encontró un hash de transacción válido en el QR.\n\nEl QR debe contener: 0x... (64 caracteres)');
-        stopQRScanner();
-      }
-      
-    } catch (error) {
-      console.error('Error procesando QR:', error);
-      alert('Error procesando código QR');
-      stopQRScanner();
-    }
   };
 
   // ========== FUNCIONES AUXILIARES ==========
@@ -663,225 +489,189 @@ export default function Home() {
     alert('Copiado al portapapeles');
   };
 
-  // ========== ESTILOS ==========
+  // ========== DETECTAR DISPOSITIVO ==========
+  const isMobile = windowWidth <= 768;
+  const isTablet = windowWidth > 768 && windowWidth <= 1024;
+  const isDesktop = windowWidth > 1024;
+
+  // ========== ESTILOS RESPONSIVOS ==========
   const styles = {
     container: {
-      maxWidth: '1200px',
+      maxWidth: isMobile ? '100%' : isTablet ? '95%' : '1200px',
       margin: '0 auto',
       background: 'white',
-      borderRadius: '20px',
-      padding: '30px',
-      boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+      borderRadius: isMobile ? '0' : '20px',
+      padding: isMobile ? '15px' : '30px',
+      boxShadow: isMobile ? 'none' : '0 20px 60px rgba(0,0,0,0.3)',
       minHeight: '100vh',
-      position: 'relative'
+      position: 'relative',
+      overflowX: 'hidden'
     },
     header: {
       textAlign: 'center',
-      marginBottom: '40px',
-      paddingBottom: '20px',
+      marginBottom: isMobile ? '20px' : '40px',
+      paddingBottom: isMobile ? '15px' : '20px',
       borderBottom: '2px solid #f0f0f0'
     },
     h1: {
-      fontSize: '2.5em',
+      fontSize: isMobile ? '1.8em' : isTablet ? '2.2em' : '2.5em',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       WebkitBackgroundClip: 'text',
       WebkitTextFillColor: 'transparent',
-      marginBottom: '10px'
+      marginBottom: isMobile ? '8px' : '10px',
+      lineHeight: '1.2',
+      padding: isMobile ? '0 10px' : '0'
     },
     subtitle: {
       color: '#666',
-      fontSize: '1.1em',
-      marginBottom: '20px'
+      fontSize: isMobile ? '0.9em' : '1.1em',
+      marginBottom: isMobile ? '15px' : '20px',
+      lineHeight: '1.4',
+      padding: isMobile ? '0 10px' : '0'
     },
     networkStatus: {
       display: 'inline-block',
-      padding: '12px 24px',
+      padding: isMobile ? '8px 16px' : '12px 24px',
       borderRadius: '50px',
       fontWeight: '600',
-      marginTop: '10px',
+      marginTop: isMobile ? '8px' : '10px',
       background: networkStatus === 'connected' ? '#d1fae5' : 
                  networkStatus === 'disconnected' ? '#fee2e2' : '#fef3c7',
       color: networkStatus === 'connected' ? '#065f46' : 
              networkStatus === 'disconnected' ? '#991b1b' : '#92400e',
       border: `2px solid ${networkStatus === 'connected' ? '#10b981' : 
-                          networkStatus === 'disconnected' ? '#ef4444' : '#f59e0b'}`
+                          networkStatus === 'disconnected' ? '#ef4444' : '#f59e0b'}`,
+      fontSize: isMobile ? '0.8em' : '1em'
     },
     inputSection: {
       background: '#f8fafc',
-      padding: '25px',
-      borderRadius: '15px',
-      marginBottom: '30px',
+      padding: isMobile ? '15px' : '25px',
+      borderRadius: isMobile ? '10px' : '15px',
+      marginBottom: isMobile ? '20px' : '30px',
       border: '2px solid #e2e8f0'
     },
     input: {
       width: '100%',
-      padding: '15px',
+      padding: isMobile ? '12px' : '15px',
       border: '2px solid #cbd5e0',
-      borderRadius: '10px',
-      fontSize: '16px',
+      borderRadius: isMobile ? '8px' : '10px',
+      fontSize: isMobile ? '14px' : '16px',
       fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-      marginBottom: '15px',
+      marginBottom: isMobile ? '12px' : '15px',
       transition: 'border-color 0.3s'
     },
     button: {
       width: '100%',
-      padding: '15px 30px',
+      padding: isMobile ? '12px 20px' : '15px 30px',
       background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
       color: 'white',
       border: 'none',
-      borderRadius: '10px',
-      fontSize: '16px',
+      borderRadius: isMobile ? '8px' : '10px',
+      fontSize: isMobile ? '14px' : '16px',
       fontWeight: '600',
       cursor: 'pointer',
       transition: 'all 0.3s',
-      marginBottom: '10px'
-    },
-    qrButton: {
-      width: '100%',
-      padding: '15px 30px',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      color: 'white',
-      border: 'none',
-      borderRadius: '10px',
-      fontSize: '16px',
-      fontWeight: '600',
-      cursor: 'pointer',
-      transition: 'all 0.3s',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: '10px',
-      marginBottom: '10px'
+      marginBottom: isMobile ? '8px' : '10px'
     },
     autoVerificationBadge: {
       background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
       color: 'white',
-      padding: '12px 24px',
+      padding: isMobile ? '10px 16px' : '12px 24px',
       borderRadius: '50px',
       fontWeight: '600',
-      marginBottom: '20px',
+      marginBottom: isMobile ? '15px' : '20px',
       textAlign: 'center',
       animation: 'pulse 2s infinite',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: '10px'
-    },
-    qrScannerOverlay: {
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: '100%',
-      background: 'rgba(0, 0, 0, 0.9)',
-      zIndex: 1000,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center'
-    },
-    qrScannerContainer: {
-      width: '90%',
-      maxWidth: '500px',
-      background: 'white',
-      borderRadius: '15px',
-      padding: '20px',
-      position: 'relative'
-    },
-    qrVideo: {
-      width: '100%',
-      borderRadius: '10px',
-      marginBottom: '20px',
-      background: '#000'
-    },
-    closeButton: {
-      position: 'absolute',
-      top: '10px',
-      right: '10px',
-      background: '#ef4444',
-      color: 'white',
-      border: 'none',
-      borderRadius: '50%',
-      width: '40px',
-      height: '40px',
-      fontSize: '20px',
-      cursor: 'pointer',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1001
+      gap: '10px',
+      fontSize: isMobile ? '0.8em' : '1em',
+      flexWrap: 'wrap'
     },
     resultCard: {
       background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
-      padding: '25px',
-      borderRadius: '15px',
-      marginTop: '20px',
+      padding: isMobile ? '15px' : '25px',
+      borderRadius: isMobile ? '10px' : '15px',
+      marginTop: isMobile ? '15px' : '20px',
       border: '2px solid #10b981',
       animation: 'slideIn 0.5s ease-out'
     },
     errorCard: {
       background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
-      padding: '25px',
-      borderRadius: '15px',
-      marginTop: '20px',
+      padding: isMobile ? '15px' : '25px',
+      borderRadius: isMobile ? '10px' : '15px',
+      marginTop: isMobile ? '15px' : '20px',
       border: '2px solid #ef4444',
       color: '#991b1b',
       animation: 'slideIn 0.5s ease-out'
     },
     detailRow: {
       display: 'flex',
-      marginBottom: '12px',
-      padding: '12px',
+      flexDirection: isMobile ? 'column' : 'row',
+      marginBottom: isMobile ? '10px' : '12px',
+      padding: isMobile ? '10px' : '12px',
       background: 'rgba(255,255,255,0.7)',
-      borderRadius: '8px',
-      alignItems: 'center'
+      borderRadius: isMobile ? '6px' : '8px',
+      alignItems: isMobile ? 'flex-start' : 'center',
+      gap: isMobile ? '5px' : '0'
     },
     detailLabel: {
-      minWidth: '180px',
+      minWidth: isMobile ? 'auto' : '180px',
       fontWeight: '600',
       color: '#374151',
-      fontSize: '1em'
+      fontSize: isMobile ? '0.9em' : '1em',
+      marginBottom: isMobile ? '5px' : '0'
     },
     detailValue: {
       flex: 1,
       color: '#1f2937',
-      fontSize: '1em'
+      fontSize: isMobile ? '0.9em' : '1em',
+      width: '100%'
     },
     pdfButton: {
-      padding: '12px 24px',
+      padding: isMobile ? '8px 16px' : '12px 24px',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       color: 'white',
       border: 'none',
-      borderRadius: '10px',
-      fontSize: '16px',
+      borderRadius: isMobile ? '6px' : '10px',
+      fontSize: isMobile ? '14px' : '16px',
       fontWeight: '600',
       cursor: 'pointer',
       transition: 'all 0.3s',
       display: 'flex',
       alignItems: 'center',
-      gap: '10px',
-      marginRight: '10px'
+      gap: '8px',
+      marginRight: isMobile ? '5px' : '10px',
+      marginBottom: isMobile ? '5px' : '0'
     },
     copyButton: {
-      padding: '12px 24px',
+      padding: isMobile ? '8px 16px' : '12px 24px',
       background: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
       color: 'white',
       border: 'none',
-      borderRadius: '10px',
-      fontSize: '16px',
+      borderRadius: isMobile ? '6px' : '10px',
+      fontSize: isMobile ? '14px' : '16px',
       fontWeight: '600',
       cursor: 'pointer',
       transition: 'all 0.3s',
       display: 'flex',
       alignItems: 'center',
-      gap: '10px'
+      gap: '8px',
+      marginBottom: isMobile ? '5px' : '0'
     },
     loading: {
       textAlign: 'center',
-      padding: '40px',
+      padding: isMobile ? '20px' : '40px',
       background: '#f8fafc',
-      borderRadius: '15px',
-      marginBottom: '20px'
+      borderRadius: isMobile ? '10px' : '15px',
+      marginBottom: isMobile ? '15px' : '20px'
+    },
+    buttonGroup: {
+      display: 'flex',
+      flexDirection: isMobile ? 'column' : 'row',
+      gap: isMobile ? '8px' : '10px',
+      marginTop: isMobile ? '10px' : '0'
     }
   };
 
@@ -904,24 +694,18 @@ export default function Home() {
     }
   }, [searchHistory]);
 
-  useEffect(() => {
-    return () => {
-      stopQRScanner();
-    };
-  }, []);
-
   // ========== RENDER ==========
   return (
     <div style={{
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '20px',
+      padding: isMobile ? '10px' : '20px',
       minHeight: '100vh'
     }}>
       <div style={styles.container}>
         <header style={styles.header}>
           <h1 style={styles.h1}>🔍 Verificador de Certificados</h1>
           <p style={styles.subtitle}>
-            Escanea el QR del certificado para verificar su autenticidad en <strong>Sonic Testnet</strong>
+            Ingresa el hash del certificado para verificar su autenticidad en <strong>Sonic Testnet</strong>
           </p>
           
           <div style={styles.networkStatus}>
@@ -939,24 +723,28 @@ export default function Home() {
             {networkStatus === 'checking' && 'Conectando a Sonic Testnet...'}
             {networkStatus === 'connected' && '✅ CONECTADO A SONIC TESTNET'}
             {networkStatus === 'disconnected' && (
-              <>
-                ❌ ERROR DE CONEXIÓN
+              <div style={{
+                display: 'flex',
+                flexDirection: isMobile ? 'column' : 'row',
+                alignItems: 'center',
+                gap: isMobile ? '5px' : '10px'
+              }}>
+                <span>❌ ERROR DE CONEXIÓN</span>
                 <button 
                   onClick={checkNetworkStatus}
                   style={{
-                    marginLeft: '10px',
                     padding: '4px 12px',
                     background: '#3b82f6',
                     color: 'white',
                     border: 'none',
                     borderRadius: '4px',
                     cursor: 'pointer',
-                    fontSize: '0.9em'
+                    fontSize: isMobile ? '0.8em' : '0.9em'
                   }}
                 >
                   Reintentar
                 </button>
-              </>
+              </div>
             )}
           </div>
         </header>
@@ -971,14 +759,15 @@ export default function Home() {
             </div>
           )}
 
-          {/* SECCIÓN DE BÚSQUEDA */}
+          {/* SECCIÓN DE BÚSQUEDA RESPONSIVA */}
           <div style={styles.inputSection}>
             <div style={{marginBottom: '20px'}}>
               <label htmlFor="transactionHash" style={{
                 display: 'block',
                 fontWeight: '600',
                 marginBottom: '8px',
-                color: '#2d3748'
+                color: '#2d3748',
+                fontSize: isMobile ? '0.9em' : '1em'
               }}>
                 Hash de la Transacción:
               </label>
@@ -992,25 +781,15 @@ export default function Home() {
                 style={styles.input}
               />
               <div style={{
-                fontSize: '0.9em',
+                fontSize: isMobile ? '0.8em' : '0.9em',
                 color: '#6b7280',
                 marginTop: '5px'
               }}>
-                Escanea el QR o ingresa el hash de la transacción
+                Ingresa el hash de la transacción o pega la URL del certificado
               </div>
             </div>
             
-            {/* BOTÓN PARA ESCANEAR QR */}
-            <button 
-              onClick={startQRScanner}
-              style={styles.qrButton}
-              disabled={showQRScanner || loading}
-            >
-              <span>📷</span>
-              {showQRScanner ? 'Escaneando...' : 'Escanear QR del Certificado'}
-            </button>
-            
-            {/* BOTÓN PARA VERIFICAR */}
+            {/* SOLO BOTÓN PARA VERIFICAR */}
             <button 
               onClick={findCertificateByTransactionHash}
               disabled={loading || !transactionHash.trim()}
@@ -1031,162 +810,85 @@ export default function Home() {
               }}
             >
               {loading ? (
-                <>
+                <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
                   <span style={{
                     display: 'inline-block',
-                    width: '16px',
-                    height: '16px',
+                    width: isMobile ? '14px' : '16px',
+                    height: isMobile ? '14px' : '16px',
                     border: '2px solid rgba(255,255,255,0.3)',
                     borderTopColor: 'white',
                     borderRadius: '50%',
                     animation: 'spin 1s linear infinite',
                     marginRight: '8px'
                   }}></span>
-                  {autoVerification ? 'Verificando automáticamente...' : 'Buscando en blockchain...'}
-                </>
+                  <span style={{fontSize: isMobile ? '0.9em' : '1em'}}>
+                    {autoVerification ? 'Verificando...' : 'Buscando...'}
+                  </span>
+                </div>
               ) : '✅ Verificar Certificado'}
             </button>
           </div>
 
-          {/* MODAL DE ESCÁNER QR MEJORADO */}
-          {showQRScanner && (
-            <div style={styles.qrScannerOverlay}>
-              <div style={styles.qrScannerContainer}>
-                <button 
-                  onClick={stopQRScanner}
-                  style={styles.closeButton}
-                >
-                  ×
-                </button>
-                
-                <h3 style={{textAlign: 'center', marginBottom: '15px', color: '#1f2937'}}>
-                  📷 Escanea el QR del Certificado
-                </h3>
-                
-                <p style={{textAlign: 'center', marginBottom: '15px', color: '#6b7280'}}>
-                  Enfoca el código QR que contiene el hash de la transacción
-                </p>
-                
-                <video 
-                  ref={videoRef}
-                  style={styles.qrVideo}
-                  playsInline
-                />
-                
-                <canvas 
-                  ref={canvasRef}
-                  style={{display: 'none'}}
-                />
-                
-                {/* INDICADOR VISUAL PARA ESCANEO */}
-                {showQRScanner && qrScanning && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    width: '250px',
-                    height: '250px',
-                    border: '4px solid #10b981',
-                    borderRadius: '10px',
-                    pointerEvents: 'none',
-                    animation: 'pulse 2s infinite',
-                    zIndex: 1002
-                  }}>
-                    <div style={{
-                      position: 'absolute',
-                      top: '10px',
-                      left: '10px',
-                      right: '10px',
-                      bottom: '10px',
-                      border: '2px dashed rgba(16, 185, 129, 0.5)',
-                      borderRadius: '6px'
-                    }}></div>
-                  </div>
-                )}
-                
-                <div style={{
-                  textAlign: 'center',
-                  marginTop: '15px',
-                  padding: '10px',
-                  background: '#f3f4f6',
-                  borderRadius: '8px'
-                }}>
-                  <div style={{
-                    color: '#4b5563',
-                    fontSize: '0.9em'
-                  }}>
-                    El QR puede contener:
-                  </div>
-                  <div style={{
-                    fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                    fontSize: '0.8em',
-                    color: '#374151',
-                    marginTop: '5px',
-                    wordBreak: 'break-all',
-                    textAlign: 'left',
-                    padding: '5px'
-                  }}>
-                    • Hash directo: 0xfe078...<br/>
-                    • URL con parámetro: https://...?tx=0x...<br/>
-                    • URL con hash en path: https://.../0x...
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* LOADING */}
+          {/* LOADING RESPONSIVO */}
           {loading && (
             <div style={styles.loading}>
               <div style={{
-                width: '60px',
-                height: '60px',
-                border: '5px solid #e2e8f0',
+                width: isMobile ? '50px' : '60px',
+                height: isMobile ? '50px' : '60px',
+                border: isMobile ? '4px solid #e2e8f0' : '5px solid #e2e8f0',
                 borderTopColor: '#667eea',
                 borderRadius: '50%',
                 animation: 'spin 1s linear infinite',
-                margin: '0 auto 20px'
+                margin: '0 auto 15px'
               }}></div>
-              <p style={{color: '#4b5563', fontWeight: '600'}}>
+              <p style={{color: '#4b5563', fontWeight: '600', fontSize: isMobile ? '0.9em' : '1em'}}>
                 {autoVerification ? 'Verificando certificado automáticamente...' : 'Buscando certificado en blockchain...'}
               </p>
-              <p style={{color: '#6b7280', fontSize: '0.9em', marginTop: '10px'}}>
+              <p style={{color: '#6b7280', fontSize: isMobile ? '0.8em' : '0.9em', marginTop: '10px'}}>
                 Consultando Sonic Testnet...
               </p>
             </div>
           )}
 
-          {/* RESULTADO - CERTIFICADO ENCONTRADO MEJORADO */}
+          {/* RESULTADO - CERTIFICADO ENCONTRADO RESPONSIVO */}
           {result && result.found && result.isValid ? (
             <div style={styles.resultCard}>
               <div style={{
                 display: 'flex',
+                flexDirection: isMobile ? 'column' : 'row',
                 justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '25px',
-                paddingBottom: '15px',
-                borderBottom: '2px solid rgba(16, 185, 129, 0.3)'
+                alignItems: isMobile ? 'flex-start' : 'center',
+                marginBottom: isMobile ? '15px' : '25px',
+                paddingBottom: isMobile ? '10px' : '15px',
+                borderBottom: '2px solid rgba(16, 185, 129, 0.3)',
+                gap: isMobile ? '10px' : '0'
               }}>
-                <h2 style={{color: '#065f46', fontSize: '1.8em'}}>🎉 CERTIFICADO VERIFICADO</h2>
+                <h2 style={{
+                  color: '#065f46', 
+                  fontSize: isMobile ? '1.3em' : isTablet ? '1.6em' : '1.8em',
+                  marginBottom: isMobile ? '5px' : '0'
+                }}>
+                  🎉 CERTIFICADO VERIFICADO
+                </h2>
                 <div style={{
                   background: '#059669',
                   color: 'white',
-                  padding: '10px 20px',
+                  padding: isMobile ? '6px 12px' : '10px 20px',
                   borderRadius: '50px',
                   fontWeight: '600',
-                  fontSize: '1.1em'
+                  fontSize: isMobile ? '0.9em' : '1.1em',
+                  whiteSpace: 'nowrap'
                 }}>
                   ✅ AUTÉNTICO
                 </div>
               </div>
               
-              <div style={{marginBottom: '25px'}}>
+              <div style={{marginBottom: isMobile ? '15px' : '25px'}}>
                 <div style={styles.detailRow}>
                   <div style={styles.detailLabel}>👤 Estudiante:</div>
                   <div style={{
                     ...styles.detailValue,
-                    fontSize: '1.2em',
+                    fontSize: isMobile ? '1em' : '1.2em',
                     fontWeight: '600',
                     color: '#1f2937'
                   }}>
@@ -1198,7 +900,7 @@ export default function Home() {
                   <div style={styles.detailLabel}>🎓 Curso/Evento:</div>
                   <div style={{
                     ...styles.detailValue,
-                    fontSize: '1.1em',
+                    fontSize: isMobile ? '0.95em' : '1.1em',
                     fontWeight: '500'
                   }}>
                     {result.certificateData.eventName}
@@ -1209,30 +911,36 @@ export default function Home() {
                   <div style={styles.detailRow}>
                     <div style={styles.detailLabel}>📄 Certificado PDF:</div>
                     <div style={styles.detailValue}>
-                      <div style={{display: 'flex', gap: '10px', marginBottom: '10px'}}>
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: isMobile ? 'column' : 'row',
+                        gap: isMobile ? '8px' : '10px',
+                        marginBottom: isMobile ? '8px' : '10px'
+                      }}>
                         <button 
                           onClick={() => openPDFFromCID(result.certificateData.arweaveHash)}
                           style={styles.pdfButton}
                         >
                           <span>📥</span>
-                          Ver Certificado
+                          {isMobile ? 'Ver PDF' : 'Ver Certificado'}
                         </button>
                         <button 
                           onClick={() => copyToClipboard(result.certificateData.arweaveHash)}
                           style={styles.copyButton}
                         >
                           <span>📋</span>
-                          Copiar CID
+                          {isMobile ? 'Copiar' : 'Copiar CID'}
                         </button>
                       </div>
                       <div style={{
-                        fontSize: '0.85em',
+                        fontSize: isMobile ? '0.75em' : '0.85em',
                         color: '#4b5563',
                         fontFamily: "'SF Mono', Monaco, Consolas, monospace",
                         background: 'rgba(255,255,255,0.5)',
-                        padding: '8px',
+                        padding: isMobile ? '6px' : '8px',
                         borderRadius: '6px',
-                        wordBreak: 'break-all'
+                        wordBreak: 'break-all',
+                        overflowWrap: 'break-word'
                       }}>
                         {formatCID(result.certificateData.arweaveHash)}
                       </div>
@@ -1245,22 +953,27 @@ export default function Home() {
                   <div style={styles.detailValue}>
                     <div style={{
                       fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                      fontSize: '0.9em',
+                      fontSize: isMobile ? '0.75em' : '0.9em',
                       background: 'rgba(255,255,255,0.5)',
-                      padding: '8px',
+                      padding: isMobile ? '6px' : '8px',
                       borderRadius: '6px',
                       wordBreak: 'break-all',
-                      marginBottom: '10px'
+                      overflowWrap: 'break-word',
+                      marginBottom: isMobile ? '8px' : '10px'
                     }}>
                       {result.certificateData.transactionHash}
                     </div>
-                    <div style={{display: 'flex', gap: '10px'}}>
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: isMobile ? 'column' : 'row',
+                      gap: isMobile ? '8px' : '10px'
+                    }}>
                       <button 
                         onClick={() => copyToClipboard(result.certificateData.transactionHash)}
                         style={styles.copyButton}
                       >
                         <span>📋</span>
-                        Copiar Hash
+                        {isMobile ? 'Copiar Hash' : 'Copiar Hash'}
                       </button>
                       <a 
                         href={`${SONIC_EXPLORER}/${result.certificateData.transactionHash}`}
@@ -1275,7 +988,7 @@ export default function Home() {
                         }}
                       >
                         <span>🔍</span>
-                        Ver en Explorer
+                        {isMobile ? 'Explorer' : 'Ver en Explorer'}
                       </a>
                     </div>
                   </div>
@@ -1284,15 +997,16 @@ export default function Home() {
               
               <div style={{
                 background: 'rgba(255,255,255,0.8)',
-                padding: '20px',
-                borderRadius: '10px',
-                border: '2px solid #bae6fd'
+                padding: isMobile ? '12px' : '20px',
+                borderRadius: isMobile ? '8px' : '10px',
+                border: '2px solid #bae6fd',
+                marginBottom: isMobile ? '15px' : '0'
               }}>
                 <div style={{
                   color: '#0369a1',
                   fontWeight: '600',
-                  fontSize: '1.1em',
-                  marginBottom: '15px',
+                  fontSize: isMobile ? '0.95em' : '1.1em',
+                  marginBottom: isMobile ? '10px' : '15px',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '10px'
@@ -1303,9 +1017,9 @@ export default function Home() {
                 
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                  gap: '15px',
-                  fontSize: '0.95em'
+                  gridTemplateColumns: isMobile ? '1fr' : isTablet ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: isMobile ? '10px' : '15px',
+                  fontSize: isMobile ? '0.85em' : '0.95em'
                 }}>
                   <div>
                     <strong>Block:</strong> {result.certificateData.blockNumber}
@@ -1314,7 +1028,7 @@ export default function Home() {
                     <strong>Contrato:</strong>{' '}
                     <span style={{
                       fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                      fontSize: '0.9em'
+                      fontSize: isMobile ? '0.8em' : '0.9em'
                     }}>
                       {CONTRACT_ADDRESS.slice(0, 10)}...{CONTRACT_ADDRESS.slice(-8)}
                     </span>
@@ -1323,27 +1037,34 @@ export default function Home() {
                     <strong>Emisor:</strong>{' '}
                     <span style={{
                       fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                      fontSize: '0.9em'
+                      fontSize: isMobile ? '0.8em' : '0.9em'
                     }}>
                       {result.certificateData.issuer.slice(0, 10)}...{result.certificateData.issuer.slice(-8)}
                     </span>
                   </div>
                   <div>
-                    <strong>Fecha de verificación:</strong>{' '}
+                    <strong>Fecha:</strong>{' '}
                     {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}
                   </div>
                 </div>
               </div>
               
-              {/* SECCIÓN MEJORADA PARA COMPARTIR */}
+              {/* SECCIÓN MEJORADA PARA COMPARTIR RESPONSIVA */}
               <div style={{
-                marginTop: '20px',
-                padding: '15px',
+                marginTop: isMobile ? '15px' : '20px',
+                padding: isMobile ? '12px' : '15px',
                 background: 'rgba(255,255,255,0.9)',
-                borderRadius: '10px',
+                borderRadius: isMobile ? '8px' : '10px',
                 border: '2px solid #e5e7eb'
               }}>
-                <h4 style={{color: '#374151', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '10px'}}>
+                <h4 style={{
+                  color: '#374151', 
+                  marginBottom: isMobile ? '8px' : '10px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '10px',
+                  fontSize: isMobile ? '0.95em' : '1em'
+                }}>
                   <span>📱</span>
                   <span>Compartir Verificación</span>
                 </h4>
@@ -1351,16 +1072,22 @@ export default function Home() {
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: '1fr',
-                  gap: '10px',
-                  marginBottom: '15px'
+                  gap: isMobile ? '8px' : '10px',
+                  marginBottom: isMobile ? '10px' : '15px'
                 }}>
                   <div>
-                    <label style={{display: 'block', fontSize: '0.9em', color: '#6b7280', marginBottom: '5px'}}>
+                    <label style={{
+                      display: 'block', 
+                      fontSize: isMobile ? '0.8em' : '0.9em', 
+                      color: '#6b7280', 
+                      marginBottom: '5px'
+                    }}>
                       URL para QR (se verifica automáticamente):
                     </label>
                     <div style={{
                       display: 'flex',
-                      gap: '10px',
+                      flexDirection: isMobile ? 'column' : 'row',
+                      gap: isMobile ? '8px' : '10px',
                       alignItems: 'center'
                     }}>
                       <input
@@ -1369,12 +1096,13 @@ export default function Home() {
                         value={generateShareableURL(result.certificateData.transactionHash)}
                         style={{
                           flex: 1,
-                          padding: '10px',
+                          padding: isMobile ? '8px' : '10px',
                           border: '2px solid #d1d5db',
                           borderRadius: '6px',
                           fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                          fontSize: '0.9em',
-                          background: '#f9fafb'
+                          fontSize: isMobile ? '0.75em' : '0.9em',
+                          background: '#f9fafb',
+                          width: '100%'
                         }}
                       />
                       <button 
@@ -1383,28 +1111,35 @@ export default function Home() {
                           copyToClipboard(url);
                         }}
                         style={{
-                          padding: '10px 15px',
+                          padding: isMobile ? '8px 12px' : '10px 15px',
                           background: '#10b981',
                           color: 'white',
                           border: 'none',
                           borderRadius: '6px',
                           cursor: 'pointer',
                           fontWeight: '600',
-                          whiteSpace: 'nowrap'
+                          whiteSpace: 'nowrap',
+                          width: isMobile ? '100%' : 'auto'
                         }}
                       >
-                        Copiar URL
+                        {isMobile ? '📋 Copiar URL' : 'Copiar URL'}
                       </button>
                     </div>
                   </div>
                   
                   <div>
-                    <label style={{display: 'block', fontSize: '0.9em', color: '#6b7280', marginBottom: '5px'}}>
+                    <label style={{
+                      display: 'block', 
+                      fontSize: isMobile ? '0.8em' : '0.9em', 
+                      color: '#6b7280', 
+                      marginBottom: '5px'
+                    }}>
                       Hash Directo (para apps):
                     </label>
                     <div style={{
                       display: 'flex',
-                      gap: '10px',
+                      flexDirection: isMobile ? 'column' : 'row',
+                      gap: isMobile ? '8px' : '10px',
                       alignItems: 'center'
                     }}>
                       <input
@@ -1413,34 +1148,44 @@ export default function Home() {
                         value={result.certificateData.transactionHash}
                         style={{
                           flex: 1,
-                          padding: '10px',
+                          padding: isMobile ? '8px' : '10px',
                           border: '2px solid #d1d5db',
                           borderRadius: '6px',
                           fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                          fontSize: '0.9em',
-                          background: '#f9fafb'
+                          fontSize: isMobile ? '0.75em' : '0.9em',
+                          background: '#f9fafb',
+                          width: '100%'
                         }}
                       />
                       <button 
                         onClick={() => copyToClipboard(result.certificateData.transactionHash)}
                         style={{
-                          padding: '10px 15px',
+                          padding: isMobile ? '8px 12px' : '10px 15px',
                           background: '#3b82f6',
                           color: 'white',
                           border: 'none',
                           borderRadius: '6px',
                           cursor: 'pointer',
                           fontWeight: '600',
-                          whiteSpace: 'nowrap'
+                          whiteSpace: 'nowrap',
+                          width: isMobile ? '100%' : 'auto'
                         }}
                       >
-                        Copiar Hash
+                        {isMobile ? '📋 Copiar Hash' : 'Copiar Hash'}
                       </button>
                     </div>
                   </div>
                 </div>
                 
-                <p style={{color: '#6b7280', fontSize: '0.85em', marginTop: '10px', padding: '8px', background: '#f3f4f6', borderRadius: '6px'}}>
+                <p style={{
+                  color: '#6b7280', 
+                  fontSize: isMobile ? '0.75em' : '0.85em', 
+                  marginTop: isMobile ? '8px' : '10px', 
+                  padding: isMobile ? '6px' : '8px', 
+                  background: '#f3f4f6', 
+                  borderRadius: '6px',
+                  lineHeight: '1.4'
+                }}>
                   <strong>💡 Cómo usar:</strong> Genera un QR con la URL copiada. Cuando alguien escanee el QR, se abrirá esta página y verificará automáticamente el certificado.
                 </p>
               </div>
@@ -1449,45 +1194,55 @@ export default function Home() {
             <div style={styles.errorCard}>
               <div style={{
                 display: 'flex',
-                alignItems: 'center',
+                flexDirection: isMobile ? 'column' : 'row',
+                alignItems: isMobile ? 'flex-start' : 'center',
                 gap: '10px',
                 marginBottom: '15px'
               }}>
-                <span style={{fontSize: '1.5em'}}>❌</span>
-                <h2 style={{color: '#991b1b', fontSize: '1.5em'}}>NO SE PUDO VERIFICAR</h2>
+                <span style={{fontSize: isMobile ? '1.3em' : '1.5em'}}>❌</span>
+                <h2 style={{
+                  color: '#991b1b', 
+                  fontSize: isMobile ? '1.2em' : '1.5em',
+                  marginBottom: isMobile ? '5px' : '0'
+                }}>
+                  NO SE PUDO VERIFICAR
+                </h2>
               </div>
               
               <p style={{
                 background: 'rgba(255,255,255,0.5)',
-                padding: '15px',
-                borderRadius: '8px',
-                marginBottom: '20px',
+                padding: isMobile ? '10px' : '15px',
+                borderRadius: isMobile ? '6px' : '8px',
+                marginBottom: isMobile ? '15px' : '20px',
                 fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-                fontSize: '0.95em'
+                fontSize: isMobile ? '0.85em' : '0.95em',
+                wordBreak: 'break-word'
               }}>
                 {result.error}
               </p>
               
               <div style={{
                 display: 'flex',
+                flexDirection: isMobile ? 'column' : 'row',
                 gap: '15px',
                 flexWrap: 'wrap'
               }}>
                 <button 
                   onClick={retryVerification}
                   style={{
-                    padding: '12px 24px',
+                    padding: isMobile ? '10px 20px' : '12px 24px',
                     background: '#ef4444',
                     color: 'white',
                     border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '16px',
+                    borderRadius: isMobile ? '6px' : '8px',
+                    fontSize: isMobile ? '14px' : '16px',
                     fontWeight: '600',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
-                    transition: 'all 0.3s'
+                    transition: 'all 0.3s',
+                    width: isMobile ? '100%' : 'auto'
                   }}
                 >
                   <span>🔄</span>
@@ -1497,15 +1252,16 @@ export default function Home() {
                 <button 
                   onClick={() => setResult(null)}
                   style={{
-                    padding: '12px 24px',
+                    padding: isMobile ? '10px 20px' : '12px 24px',
                     background: '#6b7280',
                     color: 'white',
                     border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '16px',
+                    borderRadius: isMobile ? '6px' : '8px',
+                    fontSize: isMobile ? '14px' : '16px',
                     fontWeight: '600',
                     cursor: 'pointer',
-                    transition: 'all 0.3s'
+                    transition: 'all 0.3s',
+                    width: isMobile ? '100%' : 'auto'
                   }}
                 >
                   Limpiar
@@ -1516,7 +1272,7 @@ export default function Home() {
         </main>
       </div>
       
-      {/* ESTILOS GLOBALES */}
+      {/* ESTILOS GLOBALES RESPONSIVOS */}
       <style jsx global>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
@@ -1544,6 +1300,7 @@ export default function Home() {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           min-height: 100vh;
+          overflow-x: hidden;
         }
         input:focus {
           outline: none;
@@ -1552,6 +1309,7 @@ export default function Home() {
         }
         button:disabled {
           cursor: not-allowed;
+          opacity: 0.6;
         }
         a:hover {
           text-decoration: underline;
@@ -1559,6 +1317,42 @@ export default function Home() {
         ::selection {
           background: rgba(102, 126, 234, 0.3);
           color: #000;
+        }
+        
+        /* Mejoras específicas para móviles */
+        @media (max-width: 768px) {
+          html {
+            font-size: 14px;
+          }
+          
+          input, button, textarea {
+            font-size: 16px !important; /* Evita zoom en iOS */
+          }
+          
+          /* Mejorar toques en móviles */
+          button, a {
+            min-height: 44px;
+            min-width: 44px;
+          }
+          
+          /* Scroll suave */
+          * {
+            -webkit-overflow-scrolling: touch;
+          }
+        }
+        
+        /* Mejoras para tablets */
+        @media (min-width: 769px) and (max-width: 1024px) {
+          html {
+            font-size: 15px;
+          }
+        }
+        
+        /* Mejoras para desktop */
+        @media (min-width: 1025px) {
+          html {
+            font-size: 16px;
+          }
         }
       `}</style>
     </div>
