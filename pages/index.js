@@ -1,4 +1,4 @@
-// pages/index.js - VERIFICADOR AUTOMÁTICO CON QR
+// pages/index.js - VERIFICADOR AUTOMÁTICO CON QR (VERSIÓN MEJORADA)
 import { useState, useEffect, useRef } from 'react';
 import jsQR from 'jsqr';
 
@@ -20,28 +20,101 @@ export default function Home() {
   const SONIC_RPC_URL = "https://rpc.testnet.soniclabs.com";
   const SONIC_EXPLORER = "https://testnet.soniclabs.com/tx";
 
-  // ========== VERIFICACIÓN AUTOMÁTICA AL CARGAR ==========
+  // ========== VERIFICACIÓN AUTOMÁTICA MEJORADA ==========
   useEffect(() => {
-    // Leer parámetros de la URL al cargar la página
-    const urlParams = new URLSearchParams(window.location.search);
-    const txFromUrl = urlParams.get('tx') || urlParams.get('hash') || urlParams.get('transaction');
+    const extractHashFromURL = () => {
+      try {
+        // Verificar si estamos en el navegador
+        if (typeof window === 'undefined') return null;
+        
+        const url = new URL(window.location.href);
+        const params = url.searchParams;
+        
+        // Buscar hash en múltiples parámetros posibles
+        const possibleParams = ['tx', 'hash', 'transaction', 'txHash', 'th', 'h'];
+        let hashValue = null;
+        
+        for (const param of possibleParams) {
+          const value = params.get(param);
+          if (value && value.startsWith('0x') && value.length === 66) {
+            hashValue = value;
+            break;
+          }
+        }
+        
+        // También buscar en el pathname (ej: /tx/0x...)
+        if (!hashValue) {
+          const pathMatch = window.location.pathname.match(/\/(0x[a-fA-F0-9]{64})\/?$/);
+          if (pathMatch) {
+            hashValue = pathMatch[1];
+          }
+        }
+        
+        return hashValue;
+        
+      } catch (error) {
+        console.warn('Error extrayendo hash de URL:', error);
+        return null;
+      }
+    };
     
-    if (txFromUrl) {
-      console.log('📥 Hash detectado en URL:', txFromUrl);
-      setTransactionHash(txFromUrl);
+    const hashFromURL = extractHashFromURL();
+    
+    if (hashFromURL) {
+      console.log('🔗 Hash detectado en URL:', hashFromURL);
+      
+      // Limpiar URL después de extraer el hash (sin recargar)
+      if (window.history.replaceState) {
+        const newUrl = new URL(window.location.href);
+        ['tx', 'hash', 'transaction', 'txHash', 'th', 'h'].forEach(param => {
+          newUrl.searchParams.delete(param);
+        });
+        
+        // También limpiar del pathname si está ahí
+        const cleanPathname = window.location.pathname.replace(/\/(0x[a-fA-F0-9]{64})\/?$/, '');
+        if (cleanPathname !== window.location.pathname) {
+          newUrl.pathname = cleanPathname;
+        }
+        
+        window.history.replaceState({}, document.title, newUrl.toString());
+        console.log('🔄 URL limpiada:', newUrl.toString());
+      }
+      
+      setTransactionHash(hashFromURL);
       setAutoVerification(true);
       
-      // Esperar un momento y verificar automáticamente
-      setTimeout(() => {
-        if (validateTransactionHash(txFromUrl) === null) {
-          console.log('✅ Verificando automáticamente...');
+      // Verificación inmediata sin delay
+      const validationError = validateTransactionHash(hashFromURL);
+      if (validationError === null) {
+        console.log('⚡ Verificando automáticamente...');
+        
+        // Pequeño delay para asegurar que el componente está montado
+        const verifyTimer = setTimeout(() => {
           findCertificateByTransactionHash();
-        }
-      }, 1500);
+        }, 300);
+        
+        return () => clearTimeout(verifyTimer);
+      } else {
+        console.warn('❌ Hash inválido en URL:', validationError);
+        setAutoVerification(false);
+      }
     }
   }, []);
 
-  // ========== FUNCIONES QR SCANNER SIMPLIFICADAS ==========
+  // ========== FUNCIÓN PARA GENERAR URL COMPARTIBLE ==========
+  const generateShareableURL = (hash) => {
+    if (!hash || !hash.startsWith('0x')) return '';
+    
+    const baseURL = window.location.origin;
+    const params = new URLSearchParams();
+    
+    // Usar parámetro corto y consistente
+    params.set('tx', hash);
+    
+    return `${baseURL}?${params.toString()}`;
+  };
+
+  // ========== FUNCIONES QR SCANNER ==========
 
   const startQRScanner = async () => {
     try {
@@ -131,46 +204,65 @@ export default function Home() {
     animationFrameRef.current = requestAnimationFrame(scanFrame);
   };
 
-  // FUNCIÓN SIMPLIFICADA PARA EXTRAER SOLO HASH DE TRANSACCIÓN
+  // ========== FUNCIÓN MEJORADA PARA EXTRAER HASH ==========
   const extractTransactionHash = (qrData) => {
     console.log('Extrayendo hash de QR:', qrData);
     
-    // 1. Si es solo el hash (0x...64)
+    if (!qrData || typeof qrData !== 'string') {
+      return null;
+    }
+    
+    // 1. Hash directo (0x...64)
     if (qrData.startsWith('0x') && qrData.length === 66) {
       return qrData;
     }
     
-    // 2. Si es una URL con parámetros
-    if (qrData.startsWith('http')) {
+    // 2. URL completa o parcial
+    if (qrData.includes('://') || qrData.startsWith('/') || qrData.includes('?')) {
       try {
-        const url = new URL(qrData);
-        const params = new URLSearchParams(url.search);
-        const tx = params.get('tx') || params.get('hash') || params.get('transaction');
-        
-        if (tx && tx.startsWith('0x') && tx.length === 66) {
-          return tx;
+        // Normalizar URL
+        let normalizedUrl = qrData;
+        if (!normalizedUrl.startsWith('http')) {
+          normalizedUrl = `https://${normalizedUrl}`;
         }
         
-        // También buscar en la ruta
-        const pathMatch = qrData.match(/\/tx\/(0x[a-fA-F0-9]{64})/);
-        if (pathMatch && pathMatch[1]) {
+        const url = new URL(normalizedUrl);
+        
+        // Buscar en parámetros
+        const paramNames = ['tx', 'hash', 'transaction', 'txHash', 'th', 'h'];
+        for (const param of paramNames) {
+          const value = url.searchParams.get(param);
+          if (value && value.startsWith('0x') && value.length === 66) {
+            return value;
+          }
+        }
+        
+        // Buscar en pathname
+        const pathMatch = url.pathname.match(/\/(0x[a-fA-F0-9]{64})\/?$/);
+        if (pathMatch) {
           return pathMatch[1];
         }
         
+        // Buscar hash en cualquier parte de la URL
+        const hashPattern = /(0x[a-fA-F0-9]{64})/g;
+        const matches = qrData.match(hashPattern);
+        if (matches && matches.length > 0) {
+          return matches[0];
+        }
+        
       } catch (e) {
-        console.log('No es URL válida:', e);
+        console.log('No es URL válida, buscando hash directamente:', e);
       }
     }
     
-    // 3. Buscar hash en el texto
+    // 3. Buscar hash en texto plano
     const hashPattern = /(0x[a-fA-F0-9]{64})/g;
     const matches = qrData.match(hashPattern);
     
     if (matches && matches.length > 0) {
-      return matches[0]; // Devolver el primer hash encontrado
+      return matches[0];
     }
     
-    // 4. Si no se encuentra, devolver null
     return null;
   };
 
@@ -380,33 +472,12 @@ export default function Home() {
     return null;
   };
 
-  useEffect(() => {
-    const savedHistory = localStorage.getItem('certificateSearchHistory');
-    if (savedHistory) {
-      try {
-        setSearchHistory(JSON.parse(savedHistory));
-      } catch (e) {
-        console.log('Error cargando historial:', e);
-      }
-    }
-    checkNetworkStatus();
-  }, []);
-
-  useEffect(() => {
-    if (searchHistory.length > 0) {
-      localStorage.setItem('certificateSearchHistory', JSON.stringify(searchHistory));
-    }
-  }, [searchHistory]);
-
-  useEffect(() => {
-    return () => {
-      stopQRScanner();
-    };
-  }, []);
-
   const checkNetworkStatus = async () => {
     setNetworkStatus('checking');
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
       const response = await fetch(SONIC_RPC_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -415,20 +486,27 @@ export default function Home() {
           method: 'eth_blockNumber',
           params: [],
           id: 1
-        })
+        }),
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
       
       if (response.ok) {
         const data = await response.json();
         if (data.result) {
+          const blockNumber = parseInt(data.result, 16);
           setNetworkStatus('connected');
-          return;
+          console.log(`✅ Conectado a Sonic Testnet - Block: ${blockNumber}`);
+          return true;
         }
       }
       setNetworkStatus('disconnected');
+      return false;
     } catch (error) {
       console.log('Error de conexión:', error);
       setNetworkStatus('disconnected');
+      return false;
     }
   };
 
@@ -678,12 +756,16 @@ export default function Home() {
     autoVerificationBadge: {
       background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
       color: 'white',
-      padding: '10px 20px',
+      padding: '12px 24px',
       borderRadius: '50px',
       fontWeight: '600',
-      marginBottom: '15px',
+      marginBottom: '20px',
       textAlign: 'center',
-      animation: 'pulse 2s infinite'
+      animation: 'pulse 2s infinite',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '10px'
     },
     qrScannerOverlay: {
       position: 'fixed',
@@ -803,6 +885,31 @@ export default function Home() {
     }
   };
 
+  // ========== USE EFFECTS ADICIONALES ==========
+  useEffect(() => {
+    const savedHistory = localStorage.getItem('certificateSearchHistory');
+    if (savedHistory) {
+      try {
+        setSearchHistory(JSON.parse(savedHistory));
+      } catch (e) {
+        console.log('Error cargando historial:', e);
+      }
+    }
+    checkNetworkStatus();
+  }, []);
+
+  useEffect(() => {
+    if (searchHistory.length > 0) {
+      localStorage.setItem('certificateSearchHistory', JSON.stringify(searchHistory));
+    }
+  }, [searchHistory]);
+
+  useEffect(() => {
+    return () => {
+      stopQRScanner();
+    };
+  }, []);
+
   // ========== RENDER ==========
   return (
     <div style={{
@@ -855,10 +962,12 @@ export default function Home() {
         </header>
 
         <main>
-          {/* BADGE DE VERIFICACIÓN AUTOMÁTICA */}
-          {autoVerification && !result && (
+          {/* BADGE DE VERIFICACIÓN AUTOMÁTICA MEJORADO */}
+          {autoVerification && !result && !loading && (
             <div style={styles.autoVerificationBadge}>
-              ⚡ VERIFICACIÓN AUTOMÁTICA EN PROCESO...
+              <span style={{animation: 'spin 1s linear infinite'}}>⚡</span>
+              VERIFICACIÓN AUTOMÁTICA DETECTADA
+              <span style={{animation: 'spin 1s linear infinite'}}>⚡</span>
             </div>
           )}
 
@@ -939,7 +1048,7 @@ export default function Home() {
             </button>
           </div>
 
-          {/* MODAL DE ESCÁNER QR */}
+          {/* MODAL DE ESCÁNER QR MEJORADO */}
           {showQRScanner && (
             <div style={styles.qrScannerOverlay}>
               <div style={styles.qrScannerContainer}>
@@ -969,6 +1078,33 @@ export default function Home() {
                   style={{display: 'none'}}
                 />
                 
+                {/* INDICADOR VISUAL PARA ESCANEO */}
+                {showQRScanner && qrScanning && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '250px',
+                    height: '250px',
+                    border: '4px solid #10b981',
+                    borderRadius: '10px',
+                    pointerEvents: 'none',
+                    animation: 'pulse 2s infinite',
+                    zIndex: 1002
+                  }}>
+                    <div style={{
+                      position: 'absolute',
+                      top: '10px',
+                      left: '10px',
+                      right: '10px',
+                      bottom: '10px',
+                      border: '2px dashed rgba(16, 185, 129, 0.5)',
+                      borderRadius: '6px'
+                    }}></div>
+                  </div>
+                )}
+                
                 <div style={{
                   textAlign: 'center',
                   marginTop: '15px',
@@ -980,16 +1116,20 @@ export default function Home() {
                     color: '#4b5563',
                     fontSize: '0.9em'
                   }}>
-                    El QR debe contener el hash de la transacción:
+                    El QR puede contener:
                   </div>
                   <div style={{
                     fontFamily: "'SF Mono', Monaco, Consolas, monospace",
                     fontSize: '0.8em',
                     color: '#374151',
                     marginTop: '5px',
-                    wordBreak: 'break-all'
+                    wordBreak: 'break-all',
+                    textAlign: 'left',
+                    padding: '5px'
                   }}>
-                    0xfe078480207ea526ac82c8d1a45f50d1a747653203a3d5693e9d4793e737d536
+                    • Hash directo: 0xfe078...<br/>
+                    • URL con parámetro: https://...?tx=0x...<br/>
+                    • URL con hash en path: https://.../0x...
                   </div>
                 </div>
               </div>
@@ -1017,7 +1157,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* RESULTADO - CERTIFICADO ENCONTRADO */}
+          {/* RESULTADO - CERTIFICADO ENCONTRADO MEJORADO */}
           {result && result.found && result.isValid ? (
             <div style={styles.resultCard}>
               <div style={{
@@ -1195,7 +1335,7 @@ export default function Home() {
                 </div>
               </div>
               
-              {/* GENERAR NUEVO QR CON ESTE CERTIFICADO */}
+              {/* SECCIÓN MEJORADA PARA COMPARTIR */}
               <div style={{
                 marginTop: '20px',
                 padding: '15px',
@@ -1203,35 +1343,106 @@ export default function Home() {
                 borderRadius: '10px',
                 border: '2px solid #e5e7eb'
               }}>
-                <h4 style={{color: '#374151', marginBottom: '10px'}}>
-                  📱 Compartir este certificado:
+                <h4 style={{color: '#374151', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '10px'}}>
+                  <span>📱</span>
+                  <span>Compartir Verificación</span>
                 </h4>
-                <p style={{color: '#6b7280', fontSize: '0.9em', marginBottom: '10px'}}>
-                  Puedes generar un QR para que otros verifiquen este mismo certificado:
+                
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr',
+                  gap: '10px',
+                  marginBottom: '15px'
+                }}>
+                  <div>
+                    <label style={{display: 'block', fontSize: '0.9em', color: '#6b7280', marginBottom: '5px'}}>
+                      URL para QR (se verifica automáticamente):
+                    </label>
+                    <div style={{
+                      display: 'flex',
+                      gap: '10px',
+                      alignItems: 'center'
+                    }}>
+                      <input
+                        type="text"
+                        readOnly
+                        value={generateShareableURL(result.certificateData.transactionHash)}
+                        style={{
+                          flex: 1,
+                          padding: '10px',
+                          border: '2px solid #d1d5db',
+                          borderRadius: '6px',
+                          fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+                          fontSize: '0.9em',
+                          background: '#f9fafb'
+                        }}
+                      />
+                      <button 
+                        onClick={() => {
+                          const url = generateShareableURL(result.certificateData.transactionHash);
+                          copyToClipboard(url);
+                        }}
+                        style={{
+                          padding: '10px 15px',
+                          background: '#10b981',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        Copiar URL
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label style={{display: 'block', fontSize: '0.9em', color: '#6b7280', marginBottom: '5px'}}>
+                      Hash Directo (para apps):
+                    </label>
+                    <div style={{
+                      display: 'flex',
+                      gap: '10px',
+                      alignItems: 'center'
+                    }}>
+                      <input
+                        type="text"
+                        readOnly
+                        value={result.certificateData.transactionHash}
+                        style={{
+                          flex: 1,
+                          padding: '10px',
+                          border: '2px solid #d1d5db',
+                          borderRadius: '6px',
+                          fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+                          fontSize: '0.9em',
+                          background: '#f9fafb'
+                        }}
+                      />
+                      <button 
+                        onClick={() => copyToClipboard(result.certificateData.transactionHash)}
+                        style={{
+                          padding: '10px 15px',
+                          background: '#3b82f6',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        Copiar Hash
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                
+                <p style={{color: '#6b7280', fontSize: '0.85em', marginTop: '10px', padding: '8px', background: '#f3f4f6', borderRadius: '6px'}}>
+                  <strong>💡 Cómo usar:</strong> Genera un QR con la URL copiada. Cuando alguien escanee el QR, se abrirá esta página y verificará automáticamente el certificado.
                 </p>
-                <button 
-                  onClick={() => {
-                    const verificationUrl = `https://verificador-xi.vercel.app/?tx=${result.certificateData.transactionHash}`;
-                    copyToClipboard(verificationUrl);
-                    alert(`URL copiada: ${verificationUrl}\n\nGenera un QR con esta URL para compartir.`);
-                  }}
-                  style={{
-                    padding: '10px 20px',
-                    background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  <span>🔗</span>
-                  Copiar URL de Verificación
-                </button>
               </div>
             </div>
           ) : result && result.error ? (
