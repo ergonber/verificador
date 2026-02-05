@@ -160,16 +160,54 @@ export default function Home() {
     return "";
   };
 
-  const extractDataFromInput = (inputData) => {
-    console.log("🔍 Analizando input data:", inputData);
+
+const extractDataFromInput = (inputData) => {
+  console.log("🔍 Analizando input data:", inputData);
+  
+  const result = {
+    studentName: "",
+    courseName: "",
+    fecha: "",
+    nota: "Aprobado", // Valor por defecto
+    ipfsHash: ""
+  };
+  
+  try {
+    const dataHex = inputData.slice(10);
     
-    const result = {
-      studentName: "",
-      courseName: "",
-      fecha: "",
-      nota: "",
-      ipfsHash: ""
-    };
+    if (dataHex.length >= 192) {
+      // Buscar "Aprobado" en hexadecimal (4170726f6261646f)
+      if (dataHex.includes("4170726f6261646f")) {
+        result.nota = "Aprobado";
+      }
+      
+      // Extraer timestamp para fecha
+      const timestampHex = dataHex.substring(128, 192);
+      const timestampValue = parseInt(timestampHex, 16);
+      
+      if (timestampValue > 0) {
+        result.fecha = new Date(timestampValue * 1000).toLocaleDateString('es-ES', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+      }
+      
+      // Buscar CID en el input data (si está ahí)
+      const cidPattern = /(516d[a-f0-9]{44})|(626166[a-f0-9]{50,})/;
+      const cidMatch = dataHex.match(cidPattern);
+      if (cidMatch) {
+        result.ipfsHash = hexToString(cidMatch[0]);
+      }
+    }
+    
+  } catch (error) {
+    console.error("❌ Error:", error);
+  }
+  
+  return result;
+};
+
     
     try {
       // Remover selector de función (0xb6d239b9)
@@ -855,184 +893,194 @@ export default function Home() {
   }, [searchHistory]);
 
   // ========== RENDER ==========
-  return (
-    <div style={{
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: isMobile ? '10px' : '20px',
-      minHeight: '100vh'
-    }}>
-      <div style={styles.container}>
-        <header style={styles.header}>
-          <h1 style={styles.h1}>🔍 Verificador de Certificados</h1>
-          <p style={styles.subtitle}>
-            Ingresa el hash del certificado para verificar su autenticidad en <strong>Sonic Testnet</strong>
-          </p>
-          
-          <div style={styles.networkStatus}>
-            <span style={{
-              display: 'inline-block',
-              width: '10px',
-              height: '10px',
-              borderRadius: '50%',
-              marginRight: '8px',
-              background: networkStatus === 'connected' ? '#10b981' : 
-                         networkStatus === 'disconnected' ? '#ef4444' : '#f59e0b',
-              animation: networkStatus === 'checking' ? 'pulse 1s infinite' : 'none'
-            }}></span>
-            
-            {networkStatus === 'checking' && 'Conectando a Sonic Testnet...'}
-            {networkStatus === 'connected' && '✅ CONECTADO A SONIC TESTNET'}
-            {networkStatus === 'disconnected' && (
-              <div style={{
-                display: 'flex',
-                flexDirection: isMobile ? 'column' : 'row',
-                alignItems: 'center',
-                gap: isMobile ? '5px' : '10px'
-              }}>
-                <span>❌ ERROR DE CONEXIÓN</span>
-                <button 
-                  onClick={checkNetworkStatus}
-                  style={{
-                    padding: '4px 12px',
-                    background: '#3b82f6',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: isMobile ? '0.8em' : '0.9em'
-                  }}
-                >
-                  Reintentar
-                </button>
-              </div>
-            )}
-          </div>
-        </header>
+ <div style={{
+  background: 'rgba(255,255,255,0.8)',
+  padding: isMobile ? '12px' : '20px',
+  borderRadius: isMobile ? '8px' : '10px',
+  border: '2px solid #bae6fd',
+  marginTop: isMobile ? '15px' : '20px'
+}}>
+  <div style={{
+    color: '#0369a1',
+    fontWeight: '600',
+    fontSize: isMobile ? '0.95em' : '1.1em',
+    marginBottom: isMobile ? '10px' : '15px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px'
+  }}>
+    <span>🔗</span>
+    <span>Verificado en Blockchain - Sonic Testnet</span>
+  </div>
+  
+  <div style={{
+    display: 'grid',
+    gridTemplateColumns: isMobile ? '1fr' : isTablet ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: isMobile ? '10px' : '15px',
+    fontSize: isMobile ? '0.85em' : '0.95em'
+  }}>
+    <div>
+      <strong>Block:</strong> {result.certificateData.blockNumber}
+    </div>
+    <div>
+      <strong>Contrato:</strong>{' '}
+      <span style={{
+        fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+        fontSize: isMobile ? '0.8em' : '0.9em'
+      }}>
+        {CONTRACT_ADDRESS.slice(0, 10)}...{CONTRACT_ADDRESS.slice(-8)}
+      </span>
+    </div>
+    <div>
+      <strong>Emisor:</strong>{' '}
+      <span style={{
+        fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+        fontSize: isMobile ? '0.8em' : '0.9em'
+      }}>
+        {result.certificateData.issuer.slice(0, 10)}...{result.certificateData.issuer.slice(-8)}
+      </span>
+    </div>
+  </div>
+</div>
 
-        <main>
-          {/* BADGE DE VERIFICACIÓN AUTOMÁTICA */}
-          {autoVerification && !result && !loading && (
-            <div style={styles.autoVerificationBadge}>
-              <span style={{animation: 'spin 1s linear infinite'}}>⚡</span>
-              VERIFICACIÓN AUTOMÁTICA DETECTADA
-              <span style={{animation: 'spin 1s linear infinite'}}>⚡</span>
-            </div>
-          )}
-
-          {/* SECCIÓN DE BÚSQUEDA RESPONSIVA */}
-          <div style={styles.inputSection}>
-            <div style={{marginBottom: '20px'}}>
-              <label htmlFor="transactionHash" style={{
-                display: 'block',
-                fontWeight: '600',
-                marginBottom: '8px',
-                color: '#2d3748',
-                fontSize: isMobile ? '0.9em' : '1em'
-              }}>
-                Hash de la Transacción:
-              </label>
-              <input
-                id="transactionHash"
-                type="text"
-                placeholder="0x31e6dbdf67b0dc5095d473a1c0db063f01f4e2df502dcb1b9a560e7e6f80a2b8"
-                value={transactionHash}
-                onChange={(e) => setTransactionHash(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && findCertificateByTransactionHash()}
-                style={styles.input}
-              />
-              <div style={{
-                fontSize: isMobile ? '0.8em' : '0.9em',
-                color: '#6b7280',
-                marginTop: '5px'
-              }}>
-                Ingresa el hash de la transacción o pega la URL del certificado
-              </div>
-            </div>
-            
-            {/* BOTONES DE EJEMPLO Y ACCIÓN */}
-            <div style={{
+{/* HASH DE TRANSACCIÓN con CID */}
+<div style={{
+  marginTop: isMobile ? '15px' : '20px',
+  padding: isMobile ? '12px' : '15px',
+  background: 'rgba(255,255,255,0.9)',
+  borderRadius: isMobile ? '8px' : '10px',
+  border: '2px solid #e5e7eb'
+}}>
+  <h4 style={{
+    color: '#374151', 
+    marginBottom: isMobile ? '8px' : '10px', 
+    display: 'flex', 
+    alignItems: 'center', 
+    gap: '10px',
+    fontSize: isMobile ? '0.95em' : '1em'
+  }}>
+    <span>📄</span>
+    <span>Certificado Digital (IPFS Pinata)</span>
+  </h4>
+  
+  <div style={{
+    display: 'grid',
+    gridTemplateColumns: '1fr',
+    gap: isMobile ? '8px' : '10px',
+    marginBottom: isMobile ? '10px' : '15px'
+  }}>
+    <div>
+      <label style={{
+        display: 'block', 
+        fontSize: isMobile ? '0.8em' : '0.9em', 
+        color: '#6b7280', 
+        marginBottom: '5px'
+      }}>
+        CID del documento en Pinata:
+      </label>
+      <div style={{
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: isMobile ? '8px' : '10px',
+        alignItems: 'center'
+      }}>
+        <input
+          type="text"
+          readOnly
+          value={result.certificateData.ipfsHash ? formatCID(result.certificateData.ipfsHash) : 'No disponible'}
+          style={{
+            flex: 1,
+            padding: isMobile ? '8px' : '10px',
+            border: '2px solid #d1d5db',
+            borderRadius: '6px',
+            fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+            fontSize: isMobile ? '0.75em' : '0.9em',
+            background: '#f9fafb',
+            width: '100%'
+          }}
+        />
+        {result.certificateData.ipfsHash && (
+          <button 
+            onClick={() => openPDFFromCID(result.certificateData.ipfsHash)}
+            style={{
+              padding: isMobile ? '8px 12px' : '10px 15px',
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: '600',
+              whiteSpace: 'nowrap',
+              width: isMobile ? '100%' : 'auto',
               display: 'flex',
-              flexDirection: isMobile ? 'column' : 'row',
-              gap: isMobile ? '10px' : '15px',
-              marginBottom: '15px'
-            }}>
-              <button 
-                onClick={() => setTransactionHash(exampleTransaction)}
-                style={{
-                  padding: '12px 20px',
-                  background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: isMobile ? '14px' : '16px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  flex: 1
-                }}
-              >
-                📋 Cargar Ejemplo (Ernesto)
-              </button>
-              <button 
-                onClick={() => {
-                  setTransactionHash('');
-                  setResult(null);
-                }}
-                style={{
-                  padding: '12px 20px',
-                  background: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: isMobile ? '14px' : '16px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  flex: 1
-                }}
-              >
-                🗑️ Limpiar
-              </button>
-            </div>
-            
-            {/* BOTÓN PRINCIPAL DE VERIFICACIÓN */}
-            <button 
-              onClick={findCertificateByTransactionHash}
-              disabled={loading || !transactionHash.trim()}
-              style={{
-                ...styles.button,
-                opacity: (loading || !transactionHash.trim()) ? 0.6 : 1,
-                cursor: (loading || !transactionHash.trim()) ? 'not-allowed' : 'pointer'
-              }}
-              onMouseOver={(e) => {
-                if (!loading && transactionHash.trim()) {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = '0 5px 15px rgba(16, 185, 129, 0.4)';
-                }
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-            >
-              {loading ? (
-                <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-                  <span style={{
-                    display: 'inline-block',
-                    width: isMobile ? '14px' : '16px',
-                    height: isMobile ? '14px' : '16px',
-                    border: '2px solid rgba(255,255,255,0.3)',
-                    borderTopColor: 'white',
-                    borderRadius: '50%',
-                    animation: 'spin 1s linear infinite',
-                    marginRight: '8px'
-                  }}></span>
-                  <span style={{fontSize: isMobile ? '0.9em' : '1em'}}>
-                    {autoVerification ? 'Verificando...' : 'Buscando certificado...'}
-                  </span>
-                </div>
-              ) : '✅ Verificar Certificado'}
-            </button>
-          </div>
-
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <span>👁️</span>
+            Ver Certificado
+          </button>
+        )}
+      </div>
+    </div>
+    
+    <div>
+      <label style={{
+        display: 'block', 
+        fontSize: isMobile ? '0.8em' : '0.9em', 
+        color: '#6b7280', 
+        marginBottom: '5px'
+      }}>
+        Hash de Transacción:
+      </label>
+      <div style={{
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: isMobile ? '8px' : '10px',
+        alignItems: 'center'
+      }}>
+        <input
+          type="text"
+          readOnly
+          value={result.certificateData.transactionHash}
+          style={{
+            flex: 1,
+            padding: isMobile ? '8px' : '10px',
+            border: '2px solid #d1d5db',
+            borderRadius: '6px',
+            fontFamily: "'SF Mono', Monaco, Consolas, monospace",
+            fontSize: isMobile ? '0.75em' : '0.9em',
+            background: '#f9fafb',
+            width: '100%'
+          }}
+        />
+        <a 
+          href={`${SONIC_EXPLORER}/${result.certificateData.transactionHash}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            padding: isMobile ? '8px 12px' : '10px 15px',
+            background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            whiteSpace: 'nowrap',
+            textDecoration: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            width: isMobile ? '100%' : 'auto'
+          }}
+        >
+          <span>🔍</span>
+          Ver en Explorer
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
           {/* LOADING RESPONSIVO */}
           {loading && (
             <div style={styles.loading}>
