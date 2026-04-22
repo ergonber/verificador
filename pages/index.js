@@ -1,4 +1,4 @@
-// pages/index.js - VERIFICADOR COMPLETO FUNCIONAL
+// pages/index.js - VERIFICADOR CON EXTRACCIÓN AUTOMÁTICA DE 5 CAMPOS
 import { useState, useEffect } from 'react';
 
 export default function Home() {
@@ -11,14 +11,14 @@ export default function Home() {
   const [windowWidth, setWindowWidth] = useState(0);
 
   // CONFIGURACIÓN
-  const CONTRACT_ADDRESS = "0x7ba96b6463ba70b4c5187a3606f583c101e83a16";
+  const CONTRACT_ADDRESS = "0x7BA96B6463bA70b4c5187a3606f583c101E83a16";
   const SONIC_RPC_URL = "https://rpc.testnet.soniclabs.com";
   const SONIC_EXPLORER = "https://testnet.soniclabs.com/tx";
 
-  // Hash de ejemplo (actualiza con el hash correcto de Ernesto)
+  // Hash de ejemplo
   const EXAMPLE_HASH = "0xf87526738d5e2033ce2d4f76945e4a4b1c2945d029f5e01af268737326a6ce26";
 
-  // ========== FUNCIONES DE EXTRACCIÓN ==========
+  // ========== FUNCIONES DE EXTRACCIÓN AUTOMÁTICA ==========
 
   const hexToString = (hex) => {
     try {
@@ -37,15 +37,16 @@ export default function Home() {
     }
   };
 
+  // Extraer los 5 campos automáticamente del input data
   const extractDataFromInput = (inputData) => {
     console.log("🔍 Analizando input data:", inputData);
     
     const result = {
-      studentName: "Ernesto",
-      courseName: "Curso blockchain",
-      fecha: "5 de febrero de 2026",
-      nota: "Aprobado",
-      ipfsHash: "bafybeiah5yuiil4sgeetyt3r3skbrn4j4kqxk7d4xunaooejd55vghyli4"
+      studentName: "",
+      courseName: "",
+      nota: "",
+      fecha: "",
+      ipfsHash: ""
     };
     
     try {
@@ -55,137 +56,125 @@ export default function Home() {
       
       const dataHex = inputData.slice(10);
       const fullDecoded = hexToString(dataHex);
-      console.log("📄 Texto decodificado:", fullDecoded);
+      console.log("📄 Texto decodificado completo:", fullDecoded);
       
-      // Buscar nombre
-      const namePatterns = [/Ernesto/i, /Mario/i, /Jorge/i, /Carola/i, /Juan/i, /Maria/i, /[A-Z][a-z]+ [A-Z][a-z]+/];
-      for (const pattern of namePatterns) {
-        const match = fullDecoded.match(pattern);
-        if (match) {
-          result.studentName = match[0];
-          break;
+      // Dividir en palabras/claves
+      const parts = fullDecoded.split(/[^\w\s\u00C0-\u00FF\-\.]/).filter(p => p.length > 2);
+      console.log("📝 Partes encontradas:", parts);
+      
+      // Los 5 campos vienen en orden: nombre, curso, nota, fecha, CID
+      if (parts.length >= 1) result.studentName = parts[0];
+      if (parts.length >= 2) result.courseName = parts[1];
+      if (parts.length >= 3) result.nota = parts[2];
+      if (parts.length >= 4) {
+        // Verificar si es timestamp o fecha legible
+        const posibleFecha = parts[3];
+        if (!isNaN(posibleFecha) && posibleFecha.length > 10) {
+          const timestamp = parseInt(posibleFecha);
+          if (!isNaN(timestamp) && timestamp > 1000000) {
+            result.fecha = new Date(timestamp).toLocaleDateString('es-ES');
+          } else {
+            result.fecha = posibleFecha;
+          }
+        } else {
+          result.fecha = posibleFecha;
         }
       }
-      
-      // Buscar curso
-      const coursePatterns = [/Curso blockchain/i, /blockchain/i, /Whatsapp/i, /Bycking hard/i, /Web3/i];
-      for (const pattern of coursePatterns) {
-        const match = fullDecoded.match(pattern);
-        if (match) {
-          result.courseName = match[0];
-          break;
-        }
-      }
-      
-      // Buscar CID
-      const cidPatterns = [/bafy[a-zA-Z0-9]{50,}/, /Qm[1-9A-HJ-NP-Za-km-z]{44}/];
-      for (const pattern of cidPatterns) {
-        const match = fullDecoded.match(pattern);
-        if (match) {
-          result.ipfsHash = match[0];
-          break;
-        }
-      }
-      
-    } catch (error) {
-      console.error("Error:", error);
-    }
-    
-    return result;
-  };
-
-  const forceExtractData = (inputData) => {
-    const result = {
-      studentName: "Ernesto",
-      courseName: "Curso blockchain",
-      fecha: "5 de febrero de 2026",
-      nota: "Aprobado",
-      ipfsHash: "bafybeiah5yuiil4sgeetyt3r3skbrn4j4kqxk7d4xunaooejd55vghyli4"
-    };
-    
-    try {
-      if (!inputData || inputData === '0x') return result;
-      
-      const dataHex = inputData.slice(10);
-      const decoded = hexToString(dataHex);
-      const words = decoded.split(/[^\w\s\u00C0-\u00FF\-\.]/).filter(w => w.length > 2);
-      
-      if (words.length > 0) {
-        const possibleNames = words.filter(w => /^[A-Z][a-z]+$/.test(w) || w.includes(' '));
-        if (possibleNames.length > 0) {
-          result.studentName = possibleNames[0];
-        }
-        
-        const courseKeywords = ['blockchain', 'curso', 'whatsapp', 'bycking', 'web3'];
-        for (const word of words) {
-          if (courseKeywords.some(kw => word.toLowerCase().includes(kw))) {
-            result.courseName = word;
-            break;
+      if (parts.length >= 5) {
+        // Buscar CID (empieza con bafy o Qm)
+        const posibleCID = parts[4];
+        if (posibleCID.startsWith('bafy') || posibleCID.startsWith('Qm')) {
+          result.ipfsHash = posibleCID;
+        } else {
+          // Buscar CID en todas las partes
+          for (const part of parts) {
+            if (part.startsWith('bafy') || part.startsWith('Qm')) {
+              result.ipfsHash = part;
+              break;
+            }
           }
         }
       }
       
-      if (decoded.includes('bafybeiah5yuiil4sgeetyt3r3skbrn4j4kqxk7d4xunaooejd55vghyli4')) {
-        result.ipfsHash = 'bafybeiah5yuiil4sgeetyt3r3skbrn4j4kqxk7d4xunaooejd55vghyli4';
+      // Si no se encontró fecha, usar la actual
+      if (!result.fecha) {
+        result.fecha = new Date().toLocaleDateString('es-ES');
       }
       
+      // Si no se encontró nota, usar valor por defecto
+      if (!result.nota) {
+        result.nota = "Aprobado";
+      }
+      
+      console.log("✅ Datos extraídos automáticamente:", result);
+      
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Error en extractDataFromInput:", error);
     }
     
     return result;
   };
 
-  const extractCertificateDataFromLog = (log, inputData) => {
-    const result = {
-      studentName: "Ernesto",
-      courseName: "Curso blockchain",
-      fecha: "5 de febrero de 2026",
-      nota: "Aprobado",
-      ipfsHash: "bafybeiah5yuiil4sgeetyt3r3skbrn4j4kqxk7d4xunaooejd55vghyli4",
-      certificateId: log.topics?.[1] || "0x"
+  // Extraer datos del log (eventos)
+  const extractFromLogs = (logs) => {
+    let result = {
+      studentName: "",
+      courseName: "",
+      nota: "",
+      fecha: "",
+      ipfsHash: ""
     };
     
     try {
-      const inputDataResult = extractDataFromInput(inputData);
+      if (!logs || logs.length === 0) return result;
       
-      if (inputDataResult.studentName && inputDataResult.studentName !== "Estudiante") {
-        result.studentName = inputDataResult.studentName;
-      }
-      if (inputDataResult.courseName && inputDataResult.courseName !== "Curso") {
-        result.courseName = inputDataResult.courseName;
-      }
-      if (inputDataResult.ipfsHash && inputDataResult.ipfsHash !== "") {
-        result.ipfsHash = inputDataResult.ipfsHash;
-      }
-      
-      if (log.data && log.data.length > 10) {
-        const logDataHex = log.data.slice(2);
-        const decodedLog = hexToString(logDataHex);
-        
-        const cidMatch = decodedLog.match(/(bafy[a-zA-Z0-9]{50,}|Qm[1-9A-HJ-NP-Za-km-z]{44})/);
-        if (cidMatch && cidMatch[0]) {
-          result.ipfsHash = cidMatch[0];
+      for (const log of logs) {
+        if (log.address && log.address.toLowerCase() === CONTRACT_ADDRESS.toLowerCase()) {
+          if (log.data && log.data.length > 10) {
+            const logDataHex = log.data.slice(2);
+            const decodedLog = hexToString(logDataHex);
+            console.log("📝 Log decodificado:", decodedLog);
+            
+            const parts = decodedLog.split(/[^\w\s\u00C0-\u00FF\-\.]/).filter(p => p.length > 2);
+            
+            if (parts.length >= 1 && !result.studentName) result.studentName = parts[0];
+            if (parts.length >= 2 && !result.courseName) result.courseName = parts[1];
+            if (parts.length >= 3 && !result.nota) result.nota = parts[2];
+            if (parts.length >= 4 && !result.fecha) {
+              if (!isNaN(parts[3]) && parts[3].length > 10) {
+                const ts = parseInt(parts[3]);
+                result.fecha = new Date(ts).toLocaleDateString('es-ES');
+              } else {
+                result.fecha = parts[3];
+              }
+            }
+            if (parts.length >= 5 && !result.ipfsHash) {
+              for (const part of parts) {
+                if (part.startsWith('bafy') || part.startsWith('Qm')) {
+                  result.ipfsHash = part;
+                  break;
+                }
+              }
+            }
+          }
+          
+          // Buscar en topics también
+          if (log.topics && log.topics.length > 1) {
+            for (let i = 1; i < log.topics.length; i++) {
+              const topicStr = hexToString(log.topics[i].slice(2));
+              if (topicStr && topicStr.length > 3) {
+                if (topicStr.startsWith('bafy') || topicStr.startsWith('Qm')) {
+                  result.ipfsHash = topicStr;
+                } else if (!result.studentName && topicStr.length < 50) {
+                  result.studentName = topicStr;
+                }
+              }
+            }
+          }
         }
-        
-        const nameMatch = decodedLog.match(/(Ernesto|Mario|Jorge|Carola|Juan|Maria)[\s]*[A-Z]?[a-z]*/i);
-        if (nameMatch && nameMatch[0]) {
-          result.studentName = nameMatch[0];
-        }
       }
-      
-      if (result.studentName === "Estudiante" || result.courseName === "Curso") {
-        const forcedData = forceExtractData(inputData);
-        if (forcedData.studentName && forcedData.studentName !== "Estudiante") {
-          result.studentName = forcedData.studentName;
-        }
-        if (forcedData.courseName && forcedData.courseName !== "Curso") {
-          result.courseName = forcedData.courseName;
-        }
-      }
-      
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Error extrayendo de logs:", error);
     }
     
     return result;
@@ -241,19 +230,10 @@ export default function Home() {
       try {
         if (typeof window === 'undefined') return null;
         const url = new URL(window.location.href);
-        const params = url.searchParams;
-        const possibleParams = ['tx', 'hash', 'transaction', 'txHash', 'th', 'h'];
-        
-        for (const param of possibleParams) {
-          const value = params.get(param);
-          if (value && value.startsWith('0x') && value.length === 66) {
-            return value;
-          }
+        const hashParam = url.searchParams.get('hash');
+        if (hashParam && hashParam.startsWith('0x') && hashParam.length === 66) {
+          return hashParam;
         }
-        
-        const pathMatch = window.location.pathname.match(/\/(0x[a-fA-F0-9]{64})\/?$/);
-        if (pathMatch) return pathMatch[1];
-        
         return null;
       } catch (error) {
         return null;
@@ -266,10 +246,9 @@ export default function Home() {
       console.log('🔗 Hash detectado en URL:', hashFromURL);
       setTransactionHash(hashFromURL);
       setAutoVerification(true);
-      
       setTimeout(() => {
         findCertificateByTransactionHash();
-      }, 300);
+      }, 500);
     }
   }, []);
 
@@ -340,6 +319,7 @@ export default function Home() {
     setAutoVerification(false);
 
     try {
+      // Obtener transacción
       const txResponse = await fetch(SONIC_RPC_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -360,6 +340,7 @@ export default function Home() {
       const transaction = txData.result;
       const inputData = transaction.input || "";
 
+      // Obtener receipt
       const receiptResponse = await fetch(SONIC_RPC_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -379,24 +360,35 @@ export default function Home() {
 
       const receipt = receiptData.result;
 
+      // EXTRAER DATOS AUTOMÁTICAMENTE
       let extractedData = {
-        studentName: "Ernesto",
-        courseName: "Curso blockchain",
-        fecha: "5 de febrero de 2026",
-        nota: "Aprobado",
-        ipfsHash: "bafybeiah5yuiil4sgeetyt3r3skbrn4j4kqxk7d4xunaooejd55vghyli4",
-        certificateId: "0x"
+        studentName: "",
+        courseName: "",
+        nota: "",
+        fecha: "",
+        ipfsHash: ""
       };
+      
+      // 1. Primero intentar extraer del input data
+      const inputExtracted = extractDataFromInput(inputData);
+      console.log("📊 Datos extraídos del input:", inputExtracted);
+      
+      // 2. También extraer de los logs
+      const logExtracted = extractFromLogs(receipt.logs);
+      console.log("📊 Datos extraídos de logs:", logExtracted);
+      
+      // 3. Combinar resultados (priorizar lo que tenga datos)
+      extractedData = {
+        studentName: inputExtracted.studentName || logExtracted.studentName || "Estudiante",
+        courseName: inputExtracted.courseName || logExtracted.courseName || "Curso",
+        nota: inputExtracted.nota || logExtracted.nota || "Aprobado",
+        fecha: inputExtracted.fecha || logExtracted.fecha || new Date().toLocaleDateString('es-ES'),
+        ipfsHash: inputExtracted.ipfsHash || logExtracted.ipfsHash || ""
+      };
+      
+      console.log("✅ Datos finales extraídos:", extractedData);
 
-      if (receipt.logs && receipt.logs.length > 0) {
-        for (const log of receipt.logs) {
-          if (log.address.toLowerCase() === CONTRACT_ADDRESS.toLowerCase()) {
-            extractedData = extractCertificateDataFromLog(log, inputData);
-            break;
-          }
-        }
-      }
-
+      // Crear objeto del certificado
       const certificateData = {
         issuer: transaction.from || "0x...",
         recipientName: extractedData.studentName,
@@ -404,13 +396,12 @@ export default function Home() {
         fecha: extractedData.fecha,
         nota: extractedData.nota,
         ipfsHash: extractedData.ipfsHash,
-        certificateId: extractedData.certificateId,
         transactionHash: transactionHash,
         blockNumber: parseInt(receipt.blockNumber, 16),
         contractAddress: CONTRACT_ADDRESS
       };
 
-      console.log("✅ Certificado:", certificateData);
+      console.log("🎉 Certificado procesado:", certificateData);
 
       setResult({
         isValid: true,
@@ -419,6 +410,7 @@ export default function Home() {
         isVerified: true
       });
 
+      // Guardar en historial
       const newSearch = {
         hash: transactionHash,
         studentName: certificateData.recipientName,
@@ -452,12 +444,11 @@ export default function Home() {
 
   const isMobile = windowWidth <= 768;
   const isTablet = windowWidth > 768 && windowWidth <= 1024;
-  const isDesktop = windowWidth > 1024;
 
   // ========== ESTILOS ==========
   const styles = {
     container: {
-      maxWidth: isMobile ? '100%' : isTablet ? '95%' : '1200px',
+      maxWidth: isMobile ? '100%' : isTablet ? '95%' : '800px',
       margin: '0 auto',
       background: 'white',
       borderRadius: isMobile ? '0' : '20px',
@@ -467,512 +458,222 @@ export default function Home() {
     },
     header: {
       textAlign: 'center',
-      marginBottom: isMobile ? '20px' : '40px',
+      marginBottom: isMobile ? '20px' : '30px',
       paddingBottom: isMobile ? '15px' : '20px',
       borderBottom: '2px solid #f0f0f0'
     },
     h1: {
-      fontSize: isMobile ? '1.8em' : isTablet ? '2.2em' : '2.5em',
+      fontSize: isMobile ? '1.5em' : '2em',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       WebkitBackgroundClip: 'text',
       WebkitTextFillColor: 'transparent',
-      marginBottom: isMobile ? '8px' : '10px'
+      marginBottom: '10px'
     },
     subtitle: {
       color: '#666',
-      fontSize: isMobile ? '0.9em' : '1.1em',
-      marginBottom: isMobile ? '15px' : '20px'
+      fontSize: isMobile ? '0.8em' : '0.9em'
     },
     networkStatus: {
       display: 'inline-block',
-      padding: isMobile ? '8px 16px' : '12px 24px',
+      padding: '8px 16px',
       borderRadius: '50px',
+      fontSize: '12px',
       fontWeight: '600',
-      marginTop: isMobile ? '8px' : '10px',
-      background: networkStatus === 'connected' ? '#d1fae5' : 
-                 networkStatus === 'disconnected' ? '#fee2e2' : '#fef3c7',
-      color: networkStatus === 'connected' ? '#065f46' : 
-             networkStatus === 'disconnected' ? '#991b1b' : '#92400e',
-      border: `2px solid ${networkStatus === 'connected' ? '#10b981' : 
-                          networkStatus === 'disconnected' ? '#ef4444' : '#f59e0b'}`
+      marginTop: '10px',
+      background: networkStatus === 'connected' ? '#d1fae5' : '#fee2e2',
+      color: networkStatus === 'connected' ? '#065f46' : '#991b1b'
     },
     inputSection: {
       background: '#f8fafc',
-      padding: isMobile ? '15px' : '25px',
-      borderRadius: isMobile ? '10px' : '15px',
-      marginBottom: isMobile ? '20px' : '30px',
-      border: '2px solid #e2e8f0'
+      padding: isMobile ? '15px' : '20px',
+      borderRadius: '15px',
+      marginBottom: '20px'
     },
     input: {
       width: '100%',
-      padding: isMobile ? '12px' : '15px',
-      border: '2px solid #cbd5e0',
-      borderRadius: isMobile ? '8px' : '10px',
-      fontSize: isMobile ? '14px' : '16px',
-      fontFamily: "'SF Mono', Monaco, Consolas, monospace",
-      marginBottom: isMobile ? '12px' : '15px'
+      padding: '12px',
+      border: '2px solid #e2e8f0',
+      borderRadius: '10px',
+      fontSize: '14px',
+      fontFamily: 'monospace',
+      marginBottom: '15px',
+      boxSizing: 'border-box'
     },
-    button: {
-      width: '100%',
-      padding: isMobile ? '12px 20px' : '15px 30px',
+    buttonGroup: {
+      display: 'flex',
+      flexDirection: isMobile ? 'column' : 'row',
+      gap: '10px',
+      marginBottom: '15px'
+    },
+    btnPrimary: {
+      flex: 1,
+      padding: '12px',
       background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
       color: 'white',
       border: 'none',
-      borderRadius: isMobile ? '8px' : '10px',
-      fontSize: isMobile ? '14px' : '16px',
+      borderRadius: '10px',
       fontWeight: '600',
-      cursor: 'pointer',
-      marginBottom: isMobile ? '8px' : '10px'
+      cursor: 'pointer'
+    },
+    btnSecondary: {
+      padding: '12px 20px',
+      background: '#f3f4f6',
+      color: '#374151',
+      border: '1px solid #d1d5db',
+      borderRadius: '10px',
+      fontWeight: '500',
+      cursor: 'pointer'
     },
     resultCard: {
       background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
-      padding: isMobile ? '15px' : '25px',
-      borderRadius: isMobile ? '10px' : '15px',
-      marginTop: isMobile ? '15px' : '20px',
+      padding: isMobile ? '15px' : '20px',
+      borderRadius: '15px',
+      marginTop: '20px',
       border: '2px solid #10b981'
     },
     errorCard: {
-      background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
-      padding: isMobile ? '15px' : '25px',
-      borderRadius: isMobile ? '10px' : '15px',
-      marginTop: isMobile ? '15px' : '20px',
+      background: '#fee2e2',
+      padding: isMobile ? '15px' : '20px',
+      borderRadius: '15px',
+      marginTop: '20px',
       border: '2px solid #ef4444',
       color: '#991b1b'
     },
     detailRow: {
       display: 'flex',
       flexDirection: isMobile ? 'column' : 'row',
-      marginBottom: isMobile ? '10px' : '12px',
-      padding: isMobile ? '10px' : '12px',
+      marginBottom: '10px',
+      padding: '10px',
       background: 'rgba(255,255,255,0.7)',
-      borderRadius: isMobile ? '6px' : '8px',
-      alignItems: isMobile ? 'flex-start' : 'center'
+      borderRadius: '8px'
     },
     detailLabel: {
-      minWidth: isMobile ? 'auto' : '180px',
+      minWidth: isMobile ? 'auto' : '140px',
       fontWeight: '600',
-      color: '#374151',
-      fontSize: isMobile ? '0.9em' : '1em',
       marginBottom: isMobile ? '5px' : '0'
     },
     detailValue: {
       flex: 1,
-      color: '#1f2937',
-      fontSize: isMobile ? '0.9em' : '1em',
-      width: '100%'
+      wordBreak: 'break-word'
     },
     pdfButton: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '8px',
-      padding: isMobile ? '10px 16px' : '12px 20px',
+      padding: '10px 20px',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       color: 'white',
       border: 'none',
       borderRadius: '8px',
       fontWeight: '600',
-      cursor: 'pointer'
+      cursor: 'pointer',
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '8px'
     }
   };
 
   // ========== RENDER ==========
   return (
-    <div style={{
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: isMobile ? '10px' : '20px',
-      minHeight: '100vh'
-    }}>
+    <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', padding: '20px', minHeight: '100vh' }}>
       <div style={styles.container}>
         <header style={styles.header}>
           <h1 style={styles.h1}>🔍 Verificador de Certificados</h1>
-          <p style={styles.subtitle}>
-            Ingresa el hash del certificado para verificar su autenticidad en <strong>Sonic Testnet</strong>
-          </p>
-          
+          <p style={styles.subtitle}>Ingresa el hash del certificado para verificar su autenticidad en Sonic Testnet</p>
           <div style={styles.networkStatus}>
-            <span style={{
-              display: 'inline-block',
-              width: '10px',
-              height: '10px',
-              borderRadius: '50%',
-              marginRight: '8px',
-              background: networkStatus === 'connected' ? '#10b981' : 
-                         networkStatus === 'disconnected' ? '#ef4444' : '#f59e0b',
-              animation: networkStatus === 'checking' ? 'pulse 1s infinite' : 'none'
-            }}></span>
-            
-            {networkStatus === 'checking' && 'Conectando a Sonic Testnet...'}
-            {networkStatus === 'connected' && '✅ CONECTADO A SONIC TESTNET'}
-            {networkStatus === 'disconnected' && '❌ ERROR DE CONEXIÓN'}
+            {networkStatus === 'connected' ? '✅ CONECTADO A SONIC TESTNET' : '⚠️ VERIFICANDO CONEXIÓN...'}
           </div>
         </header>
 
-        <main>
-          {autoVerification && !result && !loading && (
-            <div style={{
-              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-              color: 'white',
-              padding: isMobile ? '10px 16px' : '12px 24px',
-              borderRadius: '50px',
-              fontWeight: '600',
-              marginBottom: isMobile ? '15px' : '20px',
-              textAlign: 'center'
-            }}>
-              ⚡ VERIFICACIÓN AUTOMÁTICA DETECTADA ⚡
-            </div>
-          )}
-
-          <div style={styles.inputSection}>
-            <div style={{marginBottom: '20px'}}>
-              <label htmlFor="transactionHash" style={{
-                display: 'block',
-                fontWeight: '600',
-                marginBottom: '8px',
-                color: '#2d3748'
-              }}>
-                Hash de la Transacción:
-              </label>
-              <input
-                id="transactionHash"
-                type="text"
-                placeholder="0x..."
-                value={transactionHash}
-                onChange={(e) => setTransactionHash(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && findCertificateByTransactionHash()}
-                style={styles.input}
-              />
-            </div>
-            
-            <div style={{
-              display: 'flex',
-              flexDirection: isMobile ? 'column' : 'row',
-              gap: '10px',
-              marginBottom: '15px'
-            }}>
-              <button 
-                onClick={() => setTransactionHash(EXAMPLE_HASH)}
-                style={{
-                  padding: isMobile ? '10px 16px' : '12px 20px',
-                  background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  flex: 1
-                }}
-              >
-                📋 Cargar Ejemplo
-              </button>
-              <button 
-                onClick={() => {
-                  setTransactionHash('');
-                  setResult(null);
-                }}
-                style={{
-                  padding: isMobile ? '10px 16px' : '12px 20px',
-                  background: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  flex: 1
-                }}
-              >
-                🗑️ Limpiar
-              </button>
-            </div>
-            
-            <button 
-              onClick={findCertificateByTransactionHash}
-              disabled={loading || !transactionHash.trim()}
-              style={{
-                ...styles.button,
-                opacity: (loading || !transactionHash.trim()) ? 0.6 : 1,
-                cursor: (loading || !transactionHash.trim()) ? 'not-allowed' : 'pointer'
-              }}
-            >
+        <div style={styles.inputSection}>
+          <input
+            type="text"
+            placeholder="Hash de la transacción (0x...)"
+            value={transactionHash}
+            onChange={(e) => setTransactionHash(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && findCertificateByTransactionHash()}
+            style={styles.input}
+          />
+          
+          <div style={styles.buttonGroup}>
+            <button onClick={() => setTransactionHash(EXAMPLE_HASH)} style={styles.btnSecondary}>
+              📋 Cargar Ejemplo
+            </button>
+            <button onClick={() => { setTransactionHash(''); setResult(null); }} style={styles.btnSecondary}>
+              🗑️ Limpiar
+            </button>
+            <button onClick={findCertificateByTransactionHash} disabled={loading} style={styles.btnPrimary}>
               {loading ? '🔍 Buscando...' : '✅ Verificar Certificado'}
             </button>
           </div>
+        </div>
 
-          {loading && (
-            <div style={{
-              textAlign: 'center',
-              padding: '40px',
-              background: '#f8fafc',
-              borderRadius: '15px',
-              marginBottom: '20px'
-            }}>
-              <div style={{
-                width: '60px',
-                height: '60px',
-                border: '5px solid #e2e8f0',
-                borderTopColor: '#667eea',
-                borderRadius: '50%',
-                animation: 'spin 1s linear infinite',
-                margin: '0 auto 15px'
-              }}></div>
-              <p>Extrayendo datos del certificado...</p>
-            </div>
-          )}
+        {loading && (
+          <div style={{ textAlign: 'center', padding: '40px' }}>
+            <div style={{ width: '50px', height: '50px', border: '4px solid #e2e8f0', borderTopColor: '#667eea', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 20px' }}></div>
+            <p>Extrayendo datos del certificado...</p>
+          </div>
+        )}
 
-          {result && result.found && result.isValid ? (
-            <div style={styles.resultCard}>
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '25px',
-                paddingBottom: '15px',
-                borderBottom: '2px solid rgba(16, 185, 129, 0.3)',
-                flexWrap: 'wrap',
-                gap: '10px'
-              }}>
-                <h2 style={{color: '#065f46', fontSize: isMobile ? '1.5em' : '1.8em'}}>
-                  🎉 CERTIFICADO VERIFICADO
-                </h2>
-                <div style={{
-                  background: '#059669',
-                  color: 'white',
-                  padding: '8px 16px',
-                  borderRadius: '50px',
-                  fontWeight: '600',
-                  fontSize: isMobile ? '0.9em' : '1em'
-                }}>
-                  ✅ AUTÉNTICO
-                </div>
-              </div>
-              
-              <div style={{marginBottom: '25px'}}>
-                <div style={styles.detailRow}>
-                  <div style={styles.detailLabel}>👤 Estudiante:</div>
-                  <div style={{...styles.detailValue, fontSize: '1.2em', fontWeight: '600'}}>
-                    {result.certificateData.recipientName}
-                  </div>
-                </div>
-                
-                <div style={styles.detailRow}>
-                  <div style={styles.detailLabel}>🎓 Curso/Evento:</div>
-                  <div style={{...styles.detailValue, fontSize: '1.1em', fontWeight: '500'}}>
-                    {result.certificateData.eventName}
-                  </div>
-                </div>
-                
-                <div style={styles.detailRow}>
-                  <div style={styles.detailLabel}>📅 Fecha:</div>
-                  <div style={styles.detailValue}>{result.certificateData.fecha}</div>
-                </div>
-                
-                <div style={styles.detailRow}>
-                  <div style={styles.detailLabel}>📊 Calificación:</div>
-                  <div style={{...styles.detailValue, fontSize: '1.2em', fontWeight: 'bold', color: '#059669'}}>
-                    {result.certificateData.nota}
-                  </div>
-                </div>
-              </div>
-              
-              <div style={{
-                background: 'rgba(255,255,255,0.8)',
-                padding: '20px',
-                borderRadius: '10px',
-                border: '2px solid #bae6fd',
-                marginBottom: '20px'
-              }}>
-                <div style={{
-                  color: '#0369a1',
-                  fontWeight: '600',
-                  marginBottom: '15px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px'
-                }}>
-                  <span>🔗</span>
-                  <span>Verificado en Blockchain - Sonic Testnet</span>
-                </div>
-                
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))',
-                  gap: '15px',
-                  fontSize: '0.95em'
-                }}>
-                  <div>
-                    <strong>Block:</strong> {result.certificateData.blockNumber}
-                  </div>
-                  <div>
-                    <strong>Contrato:</strong>{' '}
-                    <span style={{fontFamily: 'monospace'}}>
-                      {CONTRACT_ADDRESS.slice(0, 10)}...{CONTRACT_ADDRESS.slice(-8)}
-                    </span>
-                  </div>
-                  <div>
-                    <strong>Emisor:</strong>{' '}
-                    <span style={{fontFamily: 'monospace'}}>
-                      {result.certificateData.issuer.slice(0, 10)}...{result.certificateData.issuer.slice(-8)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              
-              <div style={{
-                padding: '15px',
-                background: 'rgba(255,255,255,0.9)',
-                borderRadius: '10px',
-                border: '2px solid #e5e7eb'
-              }}>
-                <h4 style={{color: '#374151', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '10px'}}>
-                  <span>📄</span>
-                  <span>Certificado Digital (IPFS Pinata)</span>
-                </h4>
-                
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr',
-                  gap: '15px'
-                }}>
-                  <div>
-                    <label style={{display: 'block', fontSize: '0.9em', color: '#6b7280', marginBottom: '5px'}}>
-                      CID del documento en Pinata:
-                    </label>
-                    <div style={{
-                      display: 'flex',
-                      flexDirection: isMobile ? 'column' : 'row',
-                      gap: '10px',
-                      alignItems: isMobile ? 'stretch' : 'center'
-                    }}>
-                      <input
-                        type="text"
-                        readOnly
-                        value={result.certificateData.ipfsHash}
-                        style={{
-                          flex: 1,
-                          padding: '10px',
-                          border: '2px solid #d1d5db',
-                          borderRadius: '6px',
-                          fontFamily: 'monospace',
-                          fontSize: '0.9em',
-                          background: '#f9fafb'
-                        }}
-                      />
-                      <button 
-                        onClick={() => openPDFFromCID(result.certificateData.ipfsHash)}
-                        style={{
-                          ...styles.pdfButton,
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        <span>👁️</span>
-                        Ver Certificado
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label style={{display: 'block', fontSize: '0.9em', color: '#6b7280', marginBottom: '5px'}}>
-                      Hash de Transacción:
-                    </label>
-                    <div style={{
-                      display: 'flex',
-                      flexDirection: isMobile ? 'column' : 'row',
-                      gap: '10px',
-                      alignItems: isMobile ? 'stretch' : 'center'
-                    }}>
-                      <input
-                        type="text"
-                        readOnly
-                        value={result.certificateData.transactionHash}
-                        style={{
-                          flex: 1,
-                          padding: '10px',
-                          border: '2px solid #d1d5db',
-                          borderRadius: '6px',
-                          fontFamily: 'monospace',
-                          fontSize: '0.9em',
-                          background: '#f9fafb'
-                        }}
-                      />
-                      <a 
-                        href={`${SONIC_EXPLORER}/${result.certificateData.transactionHash}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          padding: '10px 16px',
-                          background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontWeight: '600',
-                          textDecoration: 'none',
-                          textAlign: 'center',
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        <span>🔍</span>
-                        Ver en Explorer
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              </div>
+        {result && result.isValid && (
+          <div style={styles.resultCard}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+              <h2 style={{ color: '#065f46', margin: 0 }}>🎉 CERTIFICADO VERIFICADO</h2>
+              <div style={{ background: '#059669', color: 'white', padding: '6px 12px', borderRadius: '50px', fontSize: '12px', fontWeight: '600' }}>✅ AUTÉNTICO</div>
             </div>
-          ) : result && result.error ? (
-            <div style={styles.errorCard}>
-              <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px'}}>
-                <span style={{fontSize: '1.5em'}}>❌</span>
-                <h2 style={{color: '#991b1b', fontSize: '1.5em'}}>NO SE PUDO VERIFICAR</h2>
-              </div>
-              
-              <p style={{
-                background: 'rgba(255,255,255,0.5)',
-                padding: '15px',
-                borderRadius: '8px',
-                marginBottom: '20px',
-                fontFamily: 'monospace'
-              }}>
-                {result.error}
-              </p>
-              
-              <div style={{display: 'flex', gap: '15px', flexWrap: 'wrap'}}>
-                <button 
-                  onClick={retryVerification}
-                  style={{
-                    padding: '12px 24px',
-                    background: '#ef4444',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  <span>🔄</span>
-                  Reintentar
-                </button>
-                
-                <button 
-                  onClick={() => setResult(null)}
-                  style={{
-                    padding: '12px 24px',
-                    background: '#6b7280',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: '600',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Limpiar
-                </button>
-              </div>
+            
+            <div style={styles.detailRow}>
+              <div style={styles.detailLabel}>👤 Estudiante:</div>
+              <div style={{ ...styles.detailValue, fontWeight: 'bold', fontSize: '1.1em' }}>{result.certificateData.recipientName}</div>
             </div>
-          ) : null}
-        </main>
+            
+            <div style={styles.detailRow}>
+              <div style={styles.detailLabel}>🎓 Curso:</div>
+              <div style={styles.detailValue}>{result.certificateData.eventName}</div>
+            </div>
+            
+            <div style={styles.detailRow}>
+              <div style={styles.detailLabel}>📅 Fecha:</div>
+              <div style={styles.detailValue}>{result.certificateData.fecha}</div>
+            </div>
+            
+            <div style={styles.detailRow}>
+              <div style={styles.detailLabel}>📊 Calificación:</div>
+              <div style={{ ...styles.detailValue, color: '#059669', fontWeight: 'bold' }}>{result.certificateData.nota}</div>
+            </div>
+            
+            {result.certificateData.ipfsHash && isLikelyCID(result.certificateData.ipfsHash) && (
+              <div style={styles.detailRow}>
+                <div style={styles.detailLabel}>📄 Certificado PDF:</div>
+                <div style={styles.detailValue}>
+                  <button onClick={() => openPDFFromCID(result.certificateData.ipfsHash)} style={styles.pdfButton}>
+                    👁️ Ver Certificado
+                  </button>
+                  <div style={{ fontSize: '10px', marginTop: '5px', color: '#666', wordBreak: 'break-all' }}>
+                    CID: {result.certificateData.ipfsHash.substring(0, 30)}...
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <div style={{ marginTop: '15px', fontSize: '12px', color: '#4b5563', wordBreak: 'break-all' }}>
+              <strong>📫 Hash:</strong> {result.certificateData.transactionHash}
+            </div>
+            
+            <div style={{ marginTop: '10px' }}>
+              <a href={`${SONIC_EXPLORER}/${result.certificateData.transactionHash}`} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'none' }}>
+                🔍 Ver en Sonic Explorer →
+              </a>
+            </div>
+          </div>
+        )}
+
+        {result && !result.isValid && (
+          <div style={styles.errorCard}>
+            <h3>❌ Certificado No Encontrado</h3>
+            <p>{result.error || 'No se pudo verificar el certificado. Verifica el hash e intenta nuevamente.'}</p>
+            <button onClick={retryVerification} style={{ marginTop: '10px', padding: '8px 16px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+              🔄 Reintentar
+            </button>
+          </div>
+        )}
       </div>
       
       <style jsx global>{`
@@ -996,6 +697,17 @@ export default function Home() {
         input:focus {
           outline: none;
           border-color: #667eea;
+        }
+        button {
+          cursor: pointer;
+          transition: all 0.3s ease;
+        }
+        button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+        button:hover:not(:disabled) {
+          transform: translateY(-2px);
         }
         @media (max-width: 768px) {
           html { font-size: 14px; }
