@@ -1,4 +1,4 @@
-// pages/index.js - VERIFICADOR QUE LEE AUTOMÁTICAMENTE DE LA BLOCKCHAIN
+// pages/index.js - VERIFICADOR QUE LEE DEL INPUT DE LA TRANSACCIÓN
 import { useState, useEffect } from 'react';
 
 export default function Home() {
@@ -10,15 +10,15 @@ export default function Home() {
   const [autoVerification, setAutoVerification] = useState(false);
   const [windowWidth, setWindowWidth] = useState(0);
 
-  // CONFIGURACIÓN - DIRECCIÓN CORRECTA DEL CONTRATO
+  // CONFIGURACIÓN
   const CONTRACT_ADDRESS = "0x2aac72f1efFd847C9b2E900de8fBb57be4a18e24";
   const SONIC_RPC_URL = "https://rpc.testnet.soniclabs.com";
   const SONIC_EXPLORER = "https://testnet.soniclabs.com/tx";
 
-  // Hash de ejemplo para pruebas
+  // Hash de ejemplo (Subirana)
   const EXAMPLE_HASH = "0x6285091c55f485612d03cfef254f14120749cb6d2747664a411063bf7207adf4";
 
-  // ========== FUNCIONES AUXILIARES ==========
+  // ========== FUNCIÓN PRINCIPAL: DECODIFICAR INPUT ==========
 
   const hexToString = (hex) => {
     try {
@@ -45,107 +45,91 @@ export default function Home() {
     return new Date(ts).toLocaleDateString('es-ES');
   };
 
-  // Leer los datos del certificado desde el evento de la transacción
-  const getCertificateFromTransaction = async (transactionHash) => {
-    console.log("🔍 Buscando certificado para hash:", transactionHash);
+  // DECODIFICAR EL INPUT DATA DE LA TRANSACCIÓN
+  const decodeInputData = (inputData) => {
+    console.log("🔍 Decodificando input data:", inputData);
+    
+    if (!inputData || inputData === '0x') {
+      return null;
+    }
     
     try {
-      // 1. Obtener el receipt de la transacción
-      const receiptResponse = await fetch(SONIC_RPC_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'eth_getTransactionReceipt',
-          params: [transactionHash],
-          id: 1
-        })
-      });
-
-      const receiptData = await receiptResponse.json();
-      const receipt = receiptData.result;
-
-      if (!receipt) {
-        throw new Error('Transacción no encontrada');
-      }
-
-      console.log("📋 Receipt obtenido:", receipt);
-
-      // 2. Obtener la transacción (para el from)
-      const txResponse = await fetch(SONIC_RPC_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'eth_getTransactionByHash',
-          params: [transactionHash],
-          id: 1
-        })
-      });
-
-      const txData = await txResponse.json();
-      const transaction = txData.result;
-
-      // 3. Buscar el evento CertificadoGuardado en los logs
-      let certificateData = null;
-
-      if (receipt.logs && receipt.logs.length > 0) {
-        for (const log of receipt.logs) {
-          // Verificar si el log es de nuestro contrato
-          if (log.address && log.address.toLowerCase() === CONTRACT_ADDRESS.toLowerCase()) {
-            console.log("🎯 Log del contrato encontrado:", log);
-            
-            // Decodificar el data del evento (formato ABI)
-            if (log.data && log.data.length > 10) {
-              const dataHex = log.data.slice(2);
-              
-              // Extraer strings del data
-              const extractedStrings = [];
-              let currentStr = '';
-              
-              for (let i = 0; i < dataHex.length; i += 2) {
-                const byte = dataHex.substr(i, 2);
-                const code = parseInt(byte, 16);
-                
-                if (code >= 32 && code <= 126 && code !== 0) {
-                  currentStr += String.fromCharCode(code);
-                } else if (currentStr.length > 0) {
-                  if (currentStr.length > 2) {
-                    extractedStrings.push(currentStr);
-                  }
-                  currentStr = '';
-                }
-              }
-              if (currentStr.length > 2) extractedStrings.push(currentStr);
-              
-              console.log("📝 Strings extraídos del evento:", extractedStrings);
-              
-              // Los 5 campos del certificado: nombre, curso, nota, fecha, cid
-              if (extractedStrings.length >= 5) {
-                certificateData = {
-                  studentName: extractedStrings[0],
-                  courseName: extractedStrings[1],
-                  nota: extractedStrings[2],
-                  fecha: timestampToDate(extractedStrings[3]),
-                  ipfsHash: extractedStrings[4],
-                  transactionHash: transactionHash,
-                  blockNumber: parseInt(receipt.blockNumber, 16),
-                  issuer: transaction?.from || "0x..."
-                };
-                break;
-              }
-            }
+      // Remover el selector de función (primeros 8 caracteres después de 0x)
+      const dataHex = inputData.slice(10);
+      console.log("📝 DataHex sin selector:", dataHex);
+      
+      // Extraer todos los strings del hex
+      const allStrings = [];
+      let currentStr = '';
+      
+      for (let i = 0; i < dataHex.length; i += 2) {
+        const byte = dataHex.substr(i, 2);
+        const code = parseInt(byte, 16);
+        
+        if (code >= 32 && code <= 126 && code !== 0) {
+          currentStr += String.fromCharCode(code);
+        } else if (currentStr.length > 0) {
+          if (currentStr.length > 2) {
+            allStrings.push(currentStr);
           }
+          currentStr = '';
         }
       }
-
-      return certificateData;
-
+      if (currentStr.length > 2) {
+        allStrings.push(currentStr);
+      }
+      
+      console.log("📝 Strings encontrados en input:", allStrings);
+      
+      // Buscar el CID (empieza con bafy o Qm)
+      let cid = "";
+      for (const str of allStrings) {
+        if (str.startsWith('bafy') || str.startsWith('Qm') || str.startsWith('bafk')) {
+          cid = str;
+          break;
+        }
+      }
+      
+      // Los campos del certificado (orden: nombre, curso, nota, fecha, cid)
+      // Nota: a veces la fecha viene como timestamp numérico
+      let nota = "";
+      let fecha = "";
+      
+      // Buscar nota (un número pequeño entre 0-100)
+      for (const str of allStrings) {
+        const num = parseInt(str);
+        if (!isNaN(num) && num >= 0 && num <= 100 && str.length < 4) {
+          nota = str;
+          break;
+        }
+      }
+      
+      // Buscar fecha (timestamp de 13 dígitos)
+      for (const str of allStrings) {
+        if (str.length >= 13 && !isNaN(parseInt(str))) {
+          fecha = timestampToDate(str);
+          break;
+        }
+      }
+      
+      const result = {
+        studentName: allStrings[0] || "Estudiante",
+        courseName: allStrings[1] || "Curso",
+        nota: nota || "Aprobado",
+        fecha: fecha || new Date().toLocaleDateString('es-ES'),
+        cid: cid || ""
+      };
+      
+      console.log("✅ Datos decodificados del input:", result);
+      return result;
+      
     } catch (error) {
-      console.error("Error obteniendo certificado:", error);
+      console.error("Error decodificando input:", error);
       return null;
     }
   };
+
+  // ========== FUNCIONES AUXILIARES ==========
 
   const formatCID = (cid) => {
     if (!cid) return '';
@@ -284,14 +268,68 @@ export default function Home() {
     setAutoVerification(false);
 
     try {
-      // Leer los datos directamente de la transacción en la blockchain
-      const certificateData = await getCertificateFromTransaction(transactionHash);
+      // Obtener la transacción
+      const txResponse = await fetch(SONIC_RPC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'eth_getTransactionByHash',
+          params: [transactionHash],
+          id: 1
+        })
+      });
 
-      if (!certificateData) {
-        throw new Error('No se encontraron datos del certificado en esta transacción');
+      const txData = await txResponse.json();
+
+      if (!txData.result) {
+        throw new Error('Transacción no encontrada en Sonic Testnet');
       }
 
-      console.log("✅ Certificado encontrado:", certificateData);
+      const transaction = txData.result;
+      const inputData = transaction.input || "";
+
+      if (!inputData || inputData === '0x') {
+        throw new Error('La transacción no contiene datos de certificado');
+      }
+
+      // DECODIFICAR EL INPUT DATA
+      const decodedData = decodeInputData(inputData);
+
+      if (!decodedData || !decodedData.studentName) {
+        throw new Error('No se pudieron extraer los datos del certificado');
+      }
+
+      // Obtener el receipt para el block number
+      const receiptResponse = await fetch(SONIC_RPC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'eth_getTransactionReceipt',
+          params: [transactionHash],
+          id: 1
+        })
+      });
+
+      const receiptData = await receiptResponse.json();
+      const receipt = receiptData.result;
+      const blockNumber = receipt ? parseInt(receipt.blockNumber, 16) : 0;
+
+      // Crear objeto del certificado
+      const certificateData = {
+        issuer: transaction.from || "0x...",
+        recipientName: decodedData.studentName,
+        eventName: decodedData.courseName,
+        fecha: decodedData.fecha,
+        nota: decodedData.nota,
+        ipfsHash: decodedData.cid,
+        transactionHash: transactionHash,
+        blockNumber: blockNumber,
+        contractAddress: CONTRACT_ADDRESS
+      };
+
+      console.log("🎉 Certificado procesado:", certificateData);
 
       setResult({
         isValid: true,
@@ -303,8 +341,8 @@ export default function Home() {
       // Guardar en historial
       const newSearch = {
         hash: transactionHash,
-        studentName: certificateData.studentName,
-        courseName: certificateData.courseName,
+        studentName: certificateData.recipientName,
+        courseName: certificateData.eventName,
         timestamp: Date.now(),
         cid: certificateData.ipfsHash,
         isValid: true
@@ -484,7 +522,7 @@ export default function Home() {
           
           <div style={styles.buttonGroup}>
             <button onClick={() => setTransactionHash(EXAMPLE_HASH)} style={styles.btnSecondary}>
-              📋 Cargar Ejemplo
+              📋 Cargar Ejemplo (Subirana)
             </button>
             <button onClick={() => { setTransactionHash(''); setResult(null); }} style={styles.btnSecondary}>
               🗑️ Limpiar
@@ -498,7 +536,7 @@ export default function Home() {
         {loading && (
           <div style={{ textAlign: 'center', padding: '40px' }}>
             <div style={{ width: '50px', height: '50px', border: '4px solid #e2e8f0', borderTopColor: '#667eea', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 20px' }}></div>
-            <p>Buscando certificado en la blockchain...</p>
+            <p>Extrayendo datos del certificado...</p>
           </div>
         )}
 
@@ -511,12 +549,12 @@ export default function Home() {
             
             <div style={styles.detailRow}>
               <div style={styles.detailLabel}>👤 Estudiante:</div>
-              <div style={{ ...styles.detailValue, fontWeight: 'bold', fontSize: '1.1em' }}>{result.certificateData.studentName}</div>
+              <div style={{ ...styles.detailValue, fontWeight: 'bold', fontSize: '1.1em' }}>{result.certificateData.recipientName}</div>
             </div>
             
             <div style={styles.detailRow}>
               <div style={styles.detailLabel}>🎓 Curso:</div>
-              <div style={styles.detailValue}>{result.certificateData.courseName}</div>
+              <div style={styles.detailValue}>{result.certificateData.eventName}</div>
             </div>
             
             <div style={styles.detailRow}>
