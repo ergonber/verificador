@@ -11,7 +11,7 @@ export default function Home() {
   const [windowWidth, setWindowWidth] = useState(0);
 
   // CONFIGURACIÓN
-  const CONTRACT_ADDRESS = "0x2aac72f1eFFd847C9b2E900de8fFb57be4a18e24";
+  const CONTRACT_ADDRESS = "0x2aac72f1efFd847C9b2E900de8fBb57be4a18e24";
   const SONIC_RPC_URL = "https://rpc.testnet.soniclabs.com";
   const SONIC_EXPLORER = "https://testnet.soniclabs.com/tx";
 
