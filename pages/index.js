@@ -154,26 +154,25 @@ export default function Home() {
         }
       }
       
-      // Buscar fecha (timestamp de 13 dígitos o formato dd/mm/aaaa)
-      for (let i = 0; i < cleanStrings.length; i++) {
-        const val = cleanStrings[i];
-        if (val.length === 13 && !isNaN(parseInt(val))) {
-          const timestamp = parseInt(val);
-          if (timestamp > 1000000 && timestamp < 2000000000000) {
-            fecha = new Date(timestamp).toLocaleDateString('es-ES');
-            break;
-          }
-        }
-        if (val.includes('/') && val.match(/\d{1,2}\/\d{1,2}\/\d{4}/)) {
-          fecha = val;
-          break;
-        }
-      }
-      
-      if (!fecha) {
-        fecha = new Date().toLocaleDateString('es-ES');
-      }
-      
+     
+     // Buscar fecha (timestamp de 12 o 13 dígitos)
+for (let i = 0; i < cleanStrings.length; i++) {
+  const val = cleanStrings[i];
+  // Aceptar 12 o 13 dígitos
+  if ((val.length === 12 || val.length === 13) && !isNaN(parseInt(val))) {
+    const timestamp = parseInt(val);
+    // Multiplicar por 1000 si es de 12 dígitos (segundos en lugar de ms)
+    const finalTimestamp = val.length === 12 ? timestamp * 1000 : timestamp;
+    if (finalTimestamp > 1000000 && finalTimestamp < 2000000000000) {
+      fecha = new Date(finalTimestamp).toLocaleDateString('es-ES');
+      break;
+    }
+  }
+  if (val.includes('/') && val.match(/\d{1,2}\/\d{1,2}\/\d{4}/)) {
+    fecha = val;
+    break;
+  }
+}
       const result = {
         studentName: studentName || cleanStrings[0] || "Estudiante",
         courseName: courseName || cleanStrings[1] || "Curso",
