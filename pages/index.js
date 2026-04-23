@@ -38,7 +38,7 @@ export default function Home() {
     }
   };
 
-  // DECODIFICAR EL INPUT DATA - VERSIÓN MEJORADA
+  // DECODIFICAR EL INPUT DATA - VERSIÓN QUE IGNORA EL SELECTOR
   const decodeInputData = (inputData) => {
     console.log("🔍 Decodificando input data:", inputData);
     
@@ -47,75 +47,116 @@ export default function Home() {
     }
     
     try {
+      // Saltar los primeros 8 caracteres después de 0x (selector de función)
       const dataHex = inputData.slice(10);
       console.log("📝 DataHex sin selector:", dataHex);
       
-      // Extraer TODOS los strings legibles y números
-      const allItems = [];
-      let currentText = '';
+      // Extraer TODOS los strings legibles incluyendo números
+      const allStrings = [];
+      let currentStr = '';
+      let inNumber = false;
       let currentNumber = '';
       
       for (let i = 0; i < dataHex.length; i += 2) {
         const byte = dataHex.substr(i, 2);
         const code = parseInt(byte, 16);
         
+        // Si es letra o caracter imprimible (A-Z, a-z, espacio, guión)
+        if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 32 || code === 45 || code === 95) {
+          if (currentNumber.length > 0) {
+            allStrings.push(currentNumber);
+            currentNumber = '';
+            inNumber = false;
+          }
+          currentStr += String.fromCharCode(code);
+        }
         // Si es dígito numérico (0-9)
-        if (code >= 48 && code <= 57) {
-          if (currentText.length > 0) {
-            allItems.push({ type: 'text', value: currentText });
-            currentText = '';
+        else if (code >= 48 && code <= 57) {
+          if (currentStr.length > 0) {
+            allStrings.push(currentStr);
+            currentStr = '';
           }
           currentNumber += String.fromCharCode(code);
+          inNumber = true;
         }
-        // Si es letra o caracter imprimible (A-Z, a-z)
-        else if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 32 || code === 95 || code === 45) {
-          if (currentNumber.length > 0) {
-            allItems.push({ type: 'number', value: currentNumber });
-            currentNumber = '';
-          }
-          currentText += String.fromCharCode(code);
-        }
-        // Si es otro caracter (separador)
+        // Si es otro caracter (separador, nulo, etc.)
         else {
-          if (currentText.length > 0) {
-            allItems.push({ type: 'text', value: currentText });
-            currentText = '';
+          if (currentStr.length > 0) {
+            if (currentStr.length > 1) allStrings.push(currentStr);
+            currentStr = '';
           }
           if (currentNumber.length > 0) {
-            allItems.push({ type: 'number', value: currentNumber });
+            allStrings.push(currentNumber);
             currentNumber = '';
+            inNumber = false;
           }
         }
       }
       
-      if (currentText.length > 0) allItems.push({ type: 'text', value: currentText });
-      if (currentNumber.length > 0) allItems.push({ type: 'number', value: currentNumber });
+      if (currentStr.length > 1) allStrings.push(currentStr);
+      if (currentNumber.length > 0) allStrings.push(currentNumber);
       
-      console.log("📝 Items encontrados:", allItems);
+      console.log("📝 Strings encontrados:", allStrings);
       
-      // Extraer solo los valores
-      const allValues = allItems.map(item => item.value);
-      console.log("📝 Valores encontrados:", allValues);
+      // Filtrar strings vacíos y basura
+      const cleanStrings = allStrings.filter(s => s.length > 0 && s !== '00' && s !== '0');
+      console.log("📝 Strings limpios:", cleanStrings);
       
-      // Identificar los campos
+      // Identificar los 5 campos en orden
       let studentName = "";
       let courseName = "";
       let nota = "Aprobado";
       let fecha = "";
       let cid = "";
       
-      // 1. Buscar CID (empieza con bafy, Qm, bafk, baf)
-      for (let i = 0; i < allValues.length; i++) {
-        const val = allValues[i];
-        if (val.startsWith('bafy') || val.startsWith('Qm') || val.startsWith('bafk') || (val.startsWith('baf') && val.length > 10)) {
+      // El primer string largo normalmente es el nombre
+      for (let i = 0; i < cleanStrings.length; i++) {
+        const val = cleanStrings[i];
+        if (val.length > 3 && !studentName && !val.startsWith('baf') && isNaN(parseInt(val))) {
+          studentName = val;
+          break;
+        }
+      }
+      
+      // El segundo string largo es el curso
+      let foundStudent = false;
+      for (let i = 0; i < cleanStrings.length; i++) {
+        const val = cleanStrings[i];
+        if (val === studentName) {
+          foundStudent = true;
+          continue;
+        }
+        if (foundStudent && val.length > 3 && !val.startsWith('baf') && isNaN(parseInt(val))) {
+          courseName = val;
+          break;
+        }
+      }
+      
+      // Buscar CID
+      for (let i = 0; i < cleanStrings.length; i++) {
+        const val = cleanStrings[i];
+        if (val.startsWith('bafy') || val.startsWith('Qm') || (val.startsWith('baf') && val.length > 30)) {
           cid = val;
           break;
         }
       }
       
-      // 2. Buscar fecha (timestamp de 13 dígitos)
-      for (let i = 0; i < allValues.length; i++) {
-        const val = allValues[i];
+      // Buscar nota (texto de calificación)
+      for (let i = 0; i < cleanStrings.length; i++) {
+        const val = cleanStrings[i];
+        if (val !== studentName && val !== courseName && val !== cid && val.length < 20) {
+          const lowerVal = val.toLowerCase();
+          if (lowerVal === 'reprobado' || lowerVal === 'aprobado' || lowerVal === 'excelente' || 
+              lowerVal === 'bueno' || lowerVal === 'regular' || !isNaN(parseInt(val))) {
+            nota = val;
+            break;
+          }
+        }
+      }
+      
+      // Buscar fecha (timestamp de 13 dígitos o formato dd/mm/aaaa)
+      for (let i = 0; i < cleanStrings.length; i++) {
+        const val = cleanStrings[i];
         if (val.length === 13 && !isNaN(parseInt(val))) {
           const timestamp = parseInt(val);
           if (timestamp > 1000000 && timestamp < 2000000000000) {
@@ -123,54 +164,19 @@ export default function Home() {
             break;
           }
         }
-      }
-      
-      // 3. Buscar nota (número entre 0-100, no es CID ni timestamp)
-      for (let i = 0; i < allValues.length; i++) {
-        const val = allValues[i];
-        const num = parseInt(val);
-        if (!isNaN(num) && num >= 0 && num <= 100 && val.length <= 3 && val !== cid) {
-          // Verificar que no sea parte del timestamp
-          if (val.length !== 13) {
-            nota = val;
-            break;
-          }
+        if (val.includes('/') && val.match(/\d{1,2}\/\d{1,2}\/\d{4}/)) {
+          fecha = val;
+          break;
         }
       }
       
-      // 4. El nombre y curso son los strings largos que no son CID
-      const textValues = allValues.filter(v => 
-        !v.startsWith('baf') && 
-        !v.startsWith('Qm') && 
-        isNaN(parseInt(v)) && 
-        v.length > 2 && 
-        v !== '00'
-      );
-      
-      if (textValues.length >= 1) studentName = textValues[0];
-      if (textValues.length >= 2) courseName = textValues[1];
-      
-      // Si no se encontró fecha, intentar buscar formato dd/mm/aaaa en texto
-      if (!fecha) {
-        for (let i = 0; i < allValues.length; i++) {
-          const val = allValues[i];
-          // Buscar patrón de fecha como "9/4/2026" o "15/04/2026"
-          const dateMatch = val.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-          if (dateMatch) {
-            fecha = val;
-            break;
-          }
-        }
-      }
-      
-      // Si no se encontró fecha, usar la actual
       if (!fecha) {
         fecha = new Date().toLocaleDateString('es-ES');
       }
       
       const result = {
-        studentName: studentName || allValues[0] || "Estudiante",
-        courseName: courseName || allValues[1] || "Curso",
+        studentName: studentName || cleanStrings[0] || "Estudiante",
+        courseName: courseName || cleanStrings[1] || "Curso",
         nota: nota,
         fecha: fecha,
         cid: cid
