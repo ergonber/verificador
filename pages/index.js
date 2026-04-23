@@ -15,8 +15,9 @@ export default function Home() {
   const SONIC_RPC_URL = "https://rpc.testnet.soniclabs.com";
   const SONIC_EXPLORER = "https://testnet.soniclabs.com/tx";
 
-  // Hash de ejemplo (Subirana)
-  const EXAMPLE_HASH = "0x6285091c55f485612d03cfef254f14120749cb6d2747664a411063bf7207adf4";
+  // Hashes de ejemplo
+  const EXAMPLE_HASH_SUBIRANA = "0x6285091c55f485612d03cfef254f14120749cb6d2747664a411063bf7207adf4";
+  const EXAMPLE_HASH_GALO = "0x01e8bc7713de1324405ec5c5b964486ce1731a6006b88284c2834df21413671f";
 
   // ========== FUNCIÓN PRINCIPAL: DECODIFICAR INPUT ==========
 
@@ -37,15 +38,7 @@ export default function Home() {
     }
   };
 
-  // Decodificar timestamp a fecha legible
-  const timestampToDate = (timestamp) => {
-    if (!timestamp) return "";
-    const ts = parseInt(timestamp);
-    if (isNaN(ts) || ts < 1000000) return timestamp;
-    return new Date(ts).toLocaleDateString('es-ES');
-  };
-
-  // DECODIFICAR EL INPUT DATA DE LA TRANSACCIÓN
+  // DECODIFICAR EL INPUT DATA - VERSIÓN MEJORADA
   const decodeInputData = (inputData) => {
     console.log("🔍 Decodificando input data:", inputData);
     
@@ -54,73 +47,136 @@ export default function Home() {
     }
     
     try {
-      // Remover el selector de función (primeros 8 caracteres después de 0x)
       const dataHex = inputData.slice(10);
       console.log("📝 DataHex sin selector:", dataHex);
       
-      // Extraer todos los strings del hex
-      const allStrings = [];
-      let currentStr = '';
+      // Extraer TODOS los strings legibles y números
+      const allItems = [];
+      let currentText = '';
+      let currentNumber = '';
       
       for (let i = 0; i < dataHex.length; i += 2) {
         const byte = dataHex.substr(i, 2);
         const code = parseInt(byte, 16);
         
-        if (code >= 32 && code <= 126 && code !== 0) {
-          currentStr += String.fromCharCode(code);
-        } else if (currentStr.length > 0) {
-          if (currentStr.length > 2) {
-            allStrings.push(currentStr);
+        // Si es dígito numérico (0-9)
+        if (code >= 48 && code <= 57) {
+          if (currentText.length > 0) {
+            allItems.push({ type: 'text', value: currentText });
+            currentText = '';
           }
-          currentStr = '';
+          currentNumber += String.fromCharCode(code);
+        }
+        // Si es letra o caracter imprimible (A-Z, a-z)
+        else if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 32 || code === 95 || code === 45) {
+          if (currentNumber.length > 0) {
+            allItems.push({ type: 'number', value: currentNumber });
+            currentNumber = '';
+          }
+          currentText += String.fromCharCode(code);
+        }
+        // Si es otro caracter (separador)
+        else {
+          if (currentText.length > 0) {
+            allItems.push({ type: 'text', value: currentText });
+            currentText = '';
+          }
+          if (currentNumber.length > 0) {
+            allItems.push({ type: 'number', value: currentNumber });
+            currentNumber = '';
+          }
         }
       }
-      if (currentStr.length > 2) {
-        allStrings.push(currentStr);
-      }
       
-      console.log("📝 Strings encontrados en input:", allStrings);
+      if (currentText.length > 0) allItems.push({ type: 'text', value: currentText });
+      if (currentNumber.length > 0) allItems.push({ type: 'number', value: currentNumber });
       
-      // Buscar el CID (empieza con bafy o Qm)
-      let cid = "";
-      for (const str of allStrings) {
-        if (str.startsWith('bafy') || str.startsWith('Qm') || str.startsWith('bafk')) {
-          cid = str;
-          break;
-        }
-      }
+      console.log("📝 Items encontrados:", allItems);
       
-      // Los campos del certificado (orden: nombre, curso, nota, fecha, cid)
-      // Nota: a veces la fecha viene como timestamp numérico
-      let nota = "";
+      // Extraer solo los valores
+      const allValues = allItems.map(item => item.value);
+      console.log("📝 Valores encontrados:", allValues);
+      
+      // Identificar los campos
+      let studentName = "";
+      let courseName = "";
+      let nota = "Aprobado";
       let fecha = "";
+      let cid = "";
       
-      // Buscar nota (un número pequeño entre 0-100)
-      for (const str of allStrings) {
-        const num = parseInt(str);
-        if (!isNaN(num) && num >= 0 && num <= 100 && str.length < 4) {
-          nota = str;
+      // 1. Buscar CID (empieza con bafy, Qm, bafk, baf)
+      for (let i = 0; i < allValues.length; i++) {
+        const val = allValues[i];
+        if (val.startsWith('bafy') || val.startsWith('Qm') || val.startsWith('bafk') || (val.startsWith('baf') && val.length > 10)) {
+          cid = val;
           break;
         }
       }
       
-      // Buscar fecha (timestamp de 13 dígitos)
-      for (const str of allStrings) {
-        if (str.length >= 13 && !isNaN(parseInt(str))) {
-          fecha = timestampToDate(str);
-          break;
+      // 2. Buscar fecha (timestamp de 13 dígitos)
+      for (let i = 0; i < allValues.length; i++) {
+        const val = allValues[i];
+        if (val.length === 13 && !isNaN(parseInt(val))) {
+          const timestamp = parseInt(val);
+          if (timestamp > 1000000 && timestamp < 2000000000000) {
+            fecha = new Date(timestamp).toLocaleDateString('es-ES');
+            break;
+          }
         }
+      }
+      
+      // 3. Buscar nota (número entre 0-100, no es CID ni timestamp)
+      for (let i = 0; i < allValues.length; i++) {
+        const val = allValues[i];
+        const num = parseInt(val);
+        if (!isNaN(num) && num >= 0 && num <= 100 && val.length <= 3 && val !== cid) {
+          // Verificar que no sea parte del timestamp
+          if (val.length !== 13) {
+            nota = val;
+            break;
+          }
+        }
+      }
+      
+      // 4. El nombre y curso son los strings largos que no son CID
+      const textValues = allValues.filter(v => 
+        !v.startsWith('baf') && 
+        !v.startsWith('Qm') && 
+        isNaN(parseInt(v)) && 
+        v.length > 2 && 
+        v !== '00'
+      );
+      
+      if (textValues.length >= 1) studentName = textValues[0];
+      if (textValues.length >= 2) courseName = textValues[1];
+      
+      // Si no se encontró fecha, intentar buscar formato dd/mm/aaaa en texto
+      if (!fecha) {
+        for (let i = 0; i < allValues.length; i++) {
+          const val = allValues[i];
+          // Buscar patrón de fecha como "9/4/2026" o "15/04/2026"
+          const dateMatch = val.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+          if (dateMatch) {
+            fecha = val;
+            break;
+          }
+        }
+      }
+      
+      // Si no se encontró fecha, usar la actual
+      if (!fecha) {
+        fecha = new Date().toLocaleDateString('es-ES');
       }
       
       const result = {
-        studentName: allStrings[0] || "Estudiante",
-        courseName: allStrings[1] || "Curso",
-        nota: nota || "Aprobado",
-        fecha: fecha || new Date().toLocaleDateString('es-ES'),
-        cid: cid || ""
+        studentName: studentName || allValues[0] || "Estudiante",
+        courseName: courseName || allValues[1] || "Curso",
+        nota: nota,
+        fecha: fecha,
+        cid: cid
       };
       
-      console.log("✅ Datos decodificados del input:", result);
+      console.log("✅ Datos decodificados:", result);
       return result;
       
     } catch (error) {
@@ -153,6 +209,7 @@ export default function Home() {
     }
     const cleanCID = formatCID(cid);
     const pdfUrl = `https://gateway.pinata.cloud/ipfs/${cleanCID}`;
+    console.log("🔗 Abriendo PDF:", pdfUrl);
     window.open(pdfUrl, '_blank', 'noopener,noreferrer');
   };
 
@@ -521,8 +578,11 @@ export default function Home() {
           />
           
           <div style={styles.buttonGroup}>
-            <button onClick={() => setTransactionHash(EXAMPLE_HASH)} style={styles.btnSecondary}>
-              📋 Cargar Ejemplo (Subirana)
+            <button onClick={() => setTransactionHash(EXAMPLE_HASH_SUBIRANA)} style={styles.btnSecondary}>
+              📋 Ejemplo (Subirana)
+            </button>
+            <button onClick={() => setTransactionHash(EXAMPLE_HASH_GALO)} style={styles.btnSecondary}>
+              📋 Ejemplo (Galo Salame)
             </button>
             <button onClick={() => { setTransactionHash(''); setResult(null); }} style={styles.btnSecondary}>
               🗑️ Limpiar
