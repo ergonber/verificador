@@ -19,6 +19,14 @@ export default function Home() {
   const EXAMPLE_HASH_SUBIRANA = "0x6285091c55f485612d03cfef254f14120749cb6d2747664a411063bf7207adf4";
   const EXAMPLE_HASH_GALO = "0x01e8bc7713de1324405ec5c5b964486ce1731a6006b88284c2834df21413671f";
 
+  // MAPEO DE FECHAS CORRECTAS PARA CERTIFICADOS ANTIGUOS (con fecha mal guardada)
+  const fechaCorregidaMap = {
+    "0x08ec17240e80b0efc9bb5e613046e22a6a8494731ade4d96b8555291f4edef6b": "01/04/2026",
+    "0xf0fb0e774dc42a5ac0cc5495bfd1c15663546174961db775f6d29753d470e56e": "02/04/2026",
+    "0x8bf974b5188719dd6e295165beda0470450757bfbe295febe71742a60b6e20d2": "24/04/2026",
+    "0x8bf974b5188719dd6e295165beda0470450757bfbe295febe71742a60b6e20d2": "24/04/2026"
+  };
+
   // ========== FUNCIÓN PRINCIPAL: DECODIFICAR INPUT ==========
 
   const hexToString = (hex) => {
@@ -39,7 +47,7 @@ export default function Home() {
   };
 
   // DECODIFICAR EL INPUT DATA - VERSIÓN QUE IGNORA EL SELECTOR
-  const decodeInputData = (inputData) => {
+  const decodeInputData = (inputData, txHash = "") => {
     console.log("🔍 Decodificando input data:", inputData);
     
     if (!inputData || inputData === '0x') {
@@ -47,39 +55,31 @@ export default function Home() {
     }
     
     try {
-      // Saltar los primeros 8 caracteres después de 0x (selector de función)
       const dataHex = inputData.slice(10);
       console.log("📝 DataHex sin selector:", dataHex);
       
-      // Extraer TODOS los strings legibles incluyendo números
       const allStrings = [];
       let currentStr = '';
-      let inNumber = false;
       let currentNumber = '';
       
       for (let i = 0; i < dataHex.length; i += 2) {
         const byte = dataHex.substr(i, 2);
         const code = parseInt(byte, 16);
         
-        // Si es letra o caracter imprimible (A-Z, a-z, espacio, guión)
         if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 32 || code === 45 || code === 95) {
           if (currentNumber.length > 0) {
             allStrings.push(currentNumber);
             currentNumber = '';
-            inNumber = false;
           }
           currentStr += String.fromCharCode(code);
         }
-        // Si es dígito numérico (0-9)
         else if (code >= 48 && code <= 57) {
           if (currentStr.length > 0) {
             allStrings.push(currentStr);
             currentStr = '';
           }
           currentNumber += String.fromCharCode(code);
-          inNumber = true;
         }
-        // Si es otro caracter (separador, nulo, etc.)
         else {
           if (currentStr.length > 0) {
             if (currentStr.length > 1) allStrings.push(currentStr);
@@ -88,7 +88,6 @@ export default function Home() {
           if (currentNumber.length > 0) {
             allStrings.push(currentNumber);
             currentNumber = '';
-            inNumber = false;
           }
         }
       }
@@ -98,18 +97,22 @@ export default function Home() {
       
       console.log("📝 Strings encontrados:", allStrings);
       
-      // Filtrar strings vacíos y basura
       const cleanStrings = allStrings.filter(s => s.length > 0 && s !== '00' && s !== '0');
       console.log("📝 Strings limpios:", cleanStrings);
       
-      // Identificar los 5 campos en orden
       let studentName = "";
       let courseName = "";
       let nota = "Aprobado";
       let fecha = "";
       let cid = "";
       
-      // El primer string largo normalmente es el nombre
+      // Verificar si hay fecha corregida para este hash
+      if (txHash && fechaCorregidaMap[txHash]) {
+        fecha = fechaCorregidaMap[txHash];
+        console.log("📅 Usando fecha corregida del mapa:", fecha);
+      }
+      
+      // Buscar nombre
       for (let i = 0; i < cleanStrings.length; i++) {
         const val = cleanStrings[i];
         if (val.length > 3 && !studentName && !val.startsWith('baf') && isNaN(parseInt(val))) {
@@ -118,7 +121,7 @@ export default function Home() {
         }
       }
       
-      // El segundo string largo es el curso
+      // Buscar curso
       let foundStudent = false;
       for (let i = 0; i < cleanStrings.length; i++) {
         const val = cleanStrings[i];
@@ -141,7 +144,7 @@ export default function Home() {
         }
       }
       
-      // Buscar nota (texto de calificación)
+      // Buscar nota
       for (let i = 0; i < cleanStrings.length; i++) {
         const val = cleanStrings[i];
         if (val !== studentName && val !== courseName && val !== cid && val.length < 20) {
@@ -154,25 +157,38 @@ export default function Home() {
         }
       }
       
-     
-     // Buscar fecha (timestamp de 12 o 13 dígitos)
-for (let i = 0; i < cleanStrings.length; i++) {
-  const val = cleanStrings[i];
-  // Aceptar 12 o 13 dígitos
-  if ((val.length === 12 || val.length === 13) && !isNaN(parseInt(val))) {
-    const timestamp = parseInt(val);
-    // Multiplicar por 1000 si es de 12 dígitos (segundos en lugar de ms)
-    const finalTimestamp = val.length === 12 ? timestamp * 1000 : timestamp;
-    if (finalTimestamp > 1000000 && finalTimestamp < 2000000000000) {
-      fecha = new Date(finalTimestamp).toLocaleDateString('es-ES');
-      break;
-    }
-  }
-  if (val.includes('/') && val.match(/\d{1,2}\/\d{1,2}\/\d{4}/)) {
-    fecha = val;
-    break;
-  }
-}
+      // Buscar fecha (solo si no se encontró fecha corregida)
+      if (!fecha) {
+        for (let i = 0; i < cleanStrings.length; i++) {
+          const val = cleanStrings[i];
+          // Aceptar timestamp de 10 dígitos (segundos) o 13 dígitos (milisegundos)
+          if ((val.length === 10 || val.length === 13) && !isNaN(parseInt(val))) {
+            const timestamp = parseInt(val);
+            let finalTimestamp = timestamp;
+            
+            // Si tiene 10 dígitos, está en segundos (convertir a ms)
+            if (val.length === 10) {
+              finalTimestamp = timestamp * 1000;
+            }
+            
+            if (finalTimestamp > 1000000 && finalTimestamp < 2000000000000) {
+              fecha = new Date(finalTimestamp).toLocaleDateString('es-ES');
+              console.log("📅 Timestamp encontrado:", { original: timestamp, convertido: finalTimestamp, fecha });
+              break;
+            }
+          }
+          // Si ya tiene formato legible
+          if (val.includes('/') && val.match(/\d{1,2}\/\d{1,2}\/\d{4}/)) {
+            fecha = val;
+            break;
+          }
+        }
+      }
+      
+      if (!fecha) {
+        fecha = new Date().toLocaleDateString('es-ES');
+      }
+      
       const result = {
         studentName: studentName || cleanStrings[0] || "Estudiante",
         courseName: courseName || cleanStrings[1] || "Curso",
@@ -330,7 +346,6 @@ for (let i = 0; i < cleanStrings.length; i++) {
     setAutoVerification(false);
 
     try {
-      // Obtener la transacción
       const txResponse = await fetch(SONIC_RPC_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -355,14 +370,12 @@ for (let i = 0; i < cleanStrings.length; i++) {
         throw new Error('La transacción no contiene datos de certificado');
       }
 
-      // DECODIFICAR EL INPUT DATA
-      const decodedData = decodeInputData(inputData);
+      const decodedData = decodeInputData(inputData, transactionHash);
 
       if (!decodedData || !decodedData.studentName) {
         throw new Error('No se pudieron extraer los datos del certificado');
       }
 
-      // Obtener el receipt para el block number
       const receiptResponse = await fetch(SONIC_RPC_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -378,7 +391,6 @@ for (let i = 0; i < cleanStrings.length; i++) {
       const receipt = receiptData.result;
       const blockNumber = receipt ? parseInt(receipt.blockNumber, 16) : 0;
 
-      // Crear objeto del certificado
       const certificateData = {
         issuer: transaction.from || "0x...",
         recipientName: decodedData.studentName,
@@ -400,7 +412,6 @@ for (let i = 0; i < cleanStrings.length; i++) {
         isVerified: true
       });
 
-      // Guardar en historial
       const newSearch = {
         hash: transactionHash,
         studentName: certificateData.recipientName,
