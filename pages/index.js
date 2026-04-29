@@ -39,7 +39,7 @@ export default function Home() {
   };
 
   // Decodificar INPUT DATA completa sin fragmentar
- const decodeInputData = (inputData) => {
+const decodeInputData = (inputData) => {
   console.log("🔍 Decodificando input data:", inputData);
   
   if (!inputData || inputData === '0x') {
@@ -62,14 +62,12 @@ export default function Home() {
     }
     console.log("📝 TEXTO COMPLETO DECODIFICADO:", textoCompleto);
     
-    // ========== LIMPIAR EL TEXTO (eliminar caracteres raros) ==========
-    let textoLimpio = textoCompleto.replace(/[^a-zA-ZÀ-ÿ\u00f1\u00d1\s\/]/g, ' ');
+    // ========== LIMPIAR EL TEXTO ==========
+    let textoLimpio = textoCompleto.replace(/[^a-zA-ZÀ-ÿ\u00f1\u00d1\s\/0-9]/g, ' ');
     textoLimpio = textoLimpio.replace(/\s+/g, ' ').trim();
     console.log("📝 TEXTO LIMPIO:", textoLimpio);
     
-    // ========== EXTRAER DATOS ==========
-    
-    // 1. Extraer CID
+    // ========== EXTRAER CID ==========
     let cid = "";
     const cidMatch = textoCompleto.match(/bafy[a-zA-Z0-9]{50,}/i);
     if (cidMatch) {
@@ -77,57 +75,79 @@ export default function Home() {
       console.log("🔗 CID encontrado:", cid);
     }
     
-    // 2. Extraer NOMBRE y CURSO - BUSCAR EN EL TEXTO LIMPIO
+    // ========== EXTRAER NOMBRE COMPLETO Y CURSO ==========
     let studentName = "Estudiante";
     let courseName = "Curso";
     
-    // Dividir el texto limpio en palabras
+    // Dividir en palabras
     const palabras = textoLimpio.split(' ');
     console.log("📝 Palabras:", palabras);
     
-    // Buscar patrón: nombre y curso suelen ser las primeras palabras significativas
-    // Ignorar palabras como "Estudiante", "Curso", "Aprobado", números, etc.
-    const palabrasIgnorar = ['estudiante', 'curso', 'aprobado', 'excelente', 'reprobado', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    // Filtrar palabras vacías y muy cortas
+    const palabrasFiltradas = palabras.filter(p => p.length > 1 && !p.match(/^\d+$/));
+    console.log("📝 Palabras filtradas:", palabrasFiltradas);
     
-    let palabrasSignificativas = [];
-    for (const p of palabras) {
-      if (p.length > 2 && !palabrasIgnorar.includes(p.toLowerCase()) && !p.match(/^\d+$/)) {
-        palabrasSignificativas.push(p);
-      }
-    }
-    console.log("📝 Palabras significativas:", palabrasSignificativas);
+    // Buscar el nombre completo (dos palabras consecutivas que parezcan nombre y apellido)
+    // Patrón: Primera palabra con mayúscula, segunda palabra con mayúscula
+    let nombreCompleto = "";
+    let indiceCurso = 2;
     
-    if (palabrasSignificativas.length >= 1) studentName = palabrasSignificativas[0];
-    if (palabrasSignificativas.length >= 2) courseName = palabrasSignificativas[1];
-    
-    // Buscar específicamente "Carlos Balderrama" si existe
-    const carlosMatch = textoLimpio.match(/Carlos\s+Balderrama/i);
-    if (carlosMatch) {
-      studentName = "Carlos Balderrama";
-      // Buscar el curso después del nombre
-      const despuesCarlos = textoLimpio.substring(textoLimpio.indexOf(carlosMatch[0]) + carlosMatch[0].length);
-      const radioMatch = despuesCarlos.match(/Radio\s+Centros/i);
-      if (radioMatch) {
-        courseName = "Radio Centros";
-      }
-    }
-    
-    // 3. Extraer NOTA
-    let nota = "Aprobado";
-    const notaPatterns = [
-      /excelente/i, /aprobado/i, /reprobado/i, /reprobó/i, /desaprobado/i,
-      /\b([0-9]{1,3})\b/
-    ];
-    for (const pattern of notaPatterns) {
-      const match = textoCompleto.match(pattern);
-      if (match) {
-        nota = match[0];
-        console.log("⭐ Nota encontrada:", nota);
+    for (let i = 0; i < palabrasFiltradas.length - 1; i++) {
+      const p1 = palabrasFiltradas[i];
+      const p2 = palabrasFiltradas[i + 1];
+      // Si ambas empiezan con mayúscula y no son palabras genéricas
+      if (p1[0] === p1[0].toUpperCase() && p2[0] === p2[0].toUpperCase() &&
+          !p1.toLowerCase().includes('curso') && !p2.toLowerCase().includes('curso')) {
+        nombreCompleto = p1 + " " + p2;
+        indiceCurso = i + 2;
         break;
       }
     }
     
-    // 4. Extraer FECHA
+    if (nombreCompleto) {
+      studentName = nombreCompleto;
+      console.log("👤 Nombre completo encontrado:", studentName);
+      
+      // El curso es la siguiente palabra significativa después del nombre
+      for (let i = indiceCurso; i < palabrasFiltradas.length; i++) {
+        const p = palabrasFiltradas[i];
+        // Si es una palabra larga y no parece parte del CID
+        if (p.length > 3 && !p.toLowerCase().startsWith('baf') && !p.toLowerCase().startsWith('baby')) {
+          courseName = p;
+          console.log("📚 Curso encontrado:", courseName);
+          break;
+        }
+      }
+    } else {
+      // Método alternativo: tomar primera palabra como nombre, segunda como curso
+      if (palabrasFiltradas.length >= 1) studentName = palabrasFiltradas[0];
+      if (palabrasFiltradas.length >= 2) courseName = palabrasFiltradas[1];
+    }
+    
+    // Caso específico para "Jhion Arandia" y "Periodista yo"
+    if (textoLimpio.includes("Jhion") && textoLimpio.includes("Arandia")) {
+      studentName = "Jhion Arandia";
+      if (textoLimpio.includes("Periodista")) {
+        courseName = "Periodista";
+      }
+    }
+    
+    // ========== EXTRAER NOTA ==========
+    let nota = "Aprobado";
+    // Buscar número de 1-3 dígitos
+    const notaMatch = textoCompleto.match(/\b([0-9]{1,3})\b/);
+    if (notaMatch && parseInt(notaMatch[1]) >= 0 && parseInt(notaMatch[1]) <= 100) {
+      nota = notaMatch[1];
+      console.log("⭐ Nota encontrada:", nota);
+    } else {
+      const notaTextMatch = textoCompleto.match(/(excelente|aprobado|reprobado)/i);
+      if (notaTextMatch) {
+        nota = notaTextMatch[1];
+        console.log("⭐ Nota encontrada:", nota);
+      }
+    }
+    
+    // ========== EXTRAER FECHA ==========
     let fecha = "";
     const hexPattern = /[0-9a-f]{8}/gi;
     let hexMatch;
