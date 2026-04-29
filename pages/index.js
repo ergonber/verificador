@@ -10,23 +10,14 @@ export default function Home() {
   const [autoVerification, setAutoVerification] = useState(false);
   const [windowWidth, setWindowWidth] = useState(0);
 
-  // CONFIGURACIÓN
+  // CONFIGURACIÓN - USANDO PROXY PARA EVITAR CORS
   const CONTRACT_ADDRESS = "0x0196fb4ac891F47CC194AB5D6b0419C8e709085f";
-  //const SONIC_RPC_URL = "https://rpc.testnet.soniclabs.com";
-  const SONIC_RPC_URL = "https://rpc.sonic-testnet.xyz";
+  const SONIC_RPC_URL = "/api/rpc";  // ✅ Usa el proxy local
   const SONIC_EXPLORER = "https://testnet.soniclabs.com/tx";
 
   // Hashes de ejemplo
   const EXAMPLE_HASH_SUBIRANA = "0x6285091c55f485612d03cfef254f14120749cb6d2747664a411063bf7207adf4";
   const EXAMPLE_HASH_GALO = "0x01e8bc7713de1324405ec5c5b964486ce1731a6006b88284c2834df21413671f";
-
-  // MAPEO DE FECHAS CORRECTAS PARA CERTIFICADOS ANTIGUOS (con fecha mal guardada)
-  const fechaCorregidaMap = {
-    "0x08ec17240e80b0efc9bb5e613046e22a6a8494731ade4d96b8555291f4edef6b": "01/04/2026",
-    "0xf0fb0e774dc42a5ac0cc5495bfd1c15663546174961db775f6d29753d470e56e": "02/04/2026",
-    "0x8bf974b5188719dd6e295165beda0470450757bfbe295febe71742a60b6e20d2": "24/04/2026",
-    "0x8bf974b5188719dd6e295165beda0470450757bfbe295febe71742a60b6e20d2": "24/04/2026"
-  };
 
   // ========== FUNCIÓN PRINCIPAL: DECODIFICAR INPUT ==========
 
@@ -47,8 +38,21 @@ export default function Home() {
     }
   };
 
-  // DECODIFICAR EL INPUT DATA - VERSIÓN QUE IGNORA EL SELECTOR
-  const decodeInputData = (inputData, txHash = "") => {
+  // Convertir timestamp en segundos a fecha legible
+  const timestampToDate = (timestamp) => {
+    if (!timestamp) return "";
+    let ts = parseInt(timestamp);
+    if (isNaN(ts)) return "";
+    if (ts < 10000000000) {
+      ts = ts * 1000;
+    }
+    const date = new Date(ts);
+    if (date.getFullYear() < 2020) return "";
+    return date.toLocaleDateString('es-ES');
+  };
+
+  // DECODIFICAR EL INPUT DATA - IGNORA EL SELECTOR
+  const decodeInputData = (inputData) => {
     console.log("🔍 Decodificando input data:", inputData);
     
     if (!inputData || inputData === '0x') {
@@ -59,47 +63,47 @@ export default function Home() {
       const dataHex = inputData.slice(10);
       console.log("📝 DataHex sin selector:", dataHex);
       
-      const allStrings = [];
-      let currentStr = '';
+      const allItems = [];
+      let currentText = '';
       let currentNumber = '';
       
       for (let i = 0; i < dataHex.length; i += 2) {
         const byte = dataHex.substr(i, 2);
         const code = parseInt(byte, 16);
         
-        if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 32 || code === 45 || code === 95) {
+        if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 32 || code === 45 || code === 95 || code === 47) {
           if (currentNumber.length > 0) {
-            allStrings.push(currentNumber);
+            allItems.push(currentNumber);
             currentNumber = '';
           }
-          currentStr += String.fromCharCode(code);
+          currentText += String.fromCharCode(code);
         }
         else if (code >= 48 && code <= 57) {
-          if (currentStr.length > 0) {
-            allStrings.push(currentStr);
-            currentStr = '';
+          if (currentText.length > 0) {
+            allItems.push(currentText);
+            currentText = '';
           }
           currentNumber += String.fromCharCode(code);
         }
         else {
-          if (currentStr.length > 0) {
-            if (currentStr.length > 1) allStrings.push(currentStr);
-            currentStr = '';
+          if (currentText.length > 0) {
+            if (currentText.length > 1) allItems.push(currentText);
+            currentText = '';
           }
           if (currentNumber.length > 0) {
-            allStrings.push(currentNumber);
+            allItems.push(currentNumber);
             currentNumber = '';
           }
         }
       }
       
-      if (currentStr.length > 1) allStrings.push(currentStr);
-      if (currentNumber.length > 0) allStrings.push(currentNumber);
+      if (currentText.length > 1) allItems.push(currentText);
+      if (currentNumber.length > 0) allItems.push(currentNumber);
       
-      console.log("📝 Strings encontrados:", allStrings);
+      console.log("📝 Items encontrados:", allItems);
       
-      const cleanStrings = allStrings.filter(s => s.length > 0 && s !== '00' && s !== '0');
-      console.log("📝 Strings limpios:", cleanStrings);
+      const cleanItems = allItems.filter(s => s.length > 0 && s !== '00' && s !== '0');
+      console.log("📝 Items limpios:", cleanItems);
       
       let studentName = "";
       let courseName = "";
@@ -107,16 +111,10 @@ export default function Home() {
       let fecha = "";
       let cid = "";
       
-      // Verificar si hay fecha corregida para este hash
-      if (txHash && fechaCorregidaMap[txHash]) {
-        fecha = fechaCorregidaMap[txHash];
-        console.log("📅 Usando fecha corregida del mapa:", fecha);
-      }
-      
       // Buscar nombre
-      for (let i = 0; i < cleanStrings.length; i++) {
-        const val = cleanStrings[i];
-        if (val.length > 3 && !studentName && !val.startsWith('baf') && isNaN(parseInt(val))) {
+      for (let i = 0; i < cleanItems.length; i++) {
+        const val = cleanItems[i];
+        if (val.length > 3 && !studentName && !val.startsWith('baf') && !val.startsWith('Qm') && isNaN(parseInt(val))) {
           studentName = val;
           break;
         }
@@ -124,21 +122,21 @@ export default function Home() {
       
       // Buscar curso
       let foundStudent = false;
-      for (let i = 0; i < cleanStrings.length; i++) {
-        const val = cleanStrings[i];
+      for (let i = 0; i < cleanItems.length; i++) {
+        const val = cleanItems[i];
         if (val === studentName) {
           foundStudent = true;
           continue;
         }
-        if (foundStudent && val.length > 3 && !val.startsWith('baf') && isNaN(parseInt(val))) {
+        if (foundStudent && val.length > 3 && !val.startsWith('baf') && !val.startsWith('Qm') && isNaN(parseInt(val))) {
           courseName = val;
           break;
         }
       }
       
       // Buscar CID
-      for (let i = 0; i < cleanStrings.length; i++) {
-        const val = cleanStrings[i];
+      for (let i = 0; i < cleanItems.length; i++) {
+        const val = cleanItems[i];
         if (val.startsWith('bafy') || val.startsWith('Qm') || (val.startsWith('baf') && val.length > 30)) {
           cid = val;
           break;
@@ -146,53 +144,75 @@ export default function Home() {
       }
       
       // Buscar nota
-      for (let i = 0; i < cleanStrings.length; i++) {
-        const val = cleanStrings[i];
+      for (let i = 0; i < cleanItems.length; i++) {
+        const val = cleanItems[i];
         if (val !== studentName && val !== courseName && val !== cid && val.length < 20) {
           const lowerVal = val.toLowerCase();
+          const numVal = parseInt(val);
           if (lowerVal === 'reprobado' || lowerVal === 'aprobado' || lowerVal === 'excelente' || 
-              lowerVal === 'bueno' || lowerVal === 'regular' || !isNaN(parseInt(val))) {
+              lowerVal === 'bueno' || lowerVal === 'regular' || (!isNaN(numVal) && numVal >= 0 && numVal <= 100)) {
             nota = val;
             break;
           }
         }
       }
       
-      // Buscar fecha (solo si no se encontró fecha corregida)
+      // ========== DETECCIÓN AUTOMÁTICA DE FECHA ==========
+      // Método 1: Buscar string con formato DD/MM/YYYY
+      for (let i = 0; i < cleanItems.length; i++) {
+        const val = cleanItems[i];
+        const dateMatch = val.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (dateMatch) {
+          fecha = val;
+          console.log("📅 Fecha encontrada como string:", fecha);
+          break;
+        }
+      }
+      
+      // Método 2: Buscar timestamp en segundos (número de 10 dígitos)
       if (!fecha) {
-        for (let i = 0; i < cleanStrings.length; i++) {
-          const val = cleanStrings[i];
-          // Aceptar timestamp de 10 dígitos (segundos) o 13 dígitos (milisegundos)
-          if ((val.length === 10 || val.length === 13) && !isNaN(parseInt(val))) {
+        for (let i = 0; i < cleanItems.length; i++) {
+          const val = cleanItems[i];
+          if (val.length >= 9 && val.length <= 10 && !isNaN(parseInt(val))) {
             const timestamp = parseInt(val);
-            let finalTimestamp = timestamp;
-            
-            // Si tiene 10 dígitos, está en segundos (convertir a ms)
-            if (val.length === 10) {
-              finalTimestamp = timestamp * 1000;
-            }
-            
-            if (finalTimestamp > 1000000 && finalTimestamp < 2000000000000) {
-              fecha = new Date(finalTimestamp).toLocaleDateString('es-ES');
-              console.log("📅 Timestamp encontrado:", { original: timestamp, convertido: finalTimestamp, fecha });
-              break;
+            if (timestamp > 1000000 && timestamp < 3000000000) {
+              const date = new Date(timestamp * 1000);
+              if (date.getFullYear() >= 2024 && date.getFullYear() <= 2030) {
+                fecha = date.toLocaleDateString('es-ES');
+                console.log("📅 Fecha desde timestamp (10 dígitos):", timestamp, "→", fecha);
+                break;
+              }
             }
           }
-          // Si ya tiene formato legible
-          if (val.includes('/') && val.match(/\d{1,2}\/\d{1,2}\/\d{4}/)) {
-            fecha = val;
-            break;
+        }
+      }
+      
+      // Método 3: Buscar timestamp en formato hex
+      if (!fecha) {
+        for (let i = 0; i < cleanItems.length; i++) {
+          const val = cleanItems[i];
+          if (val.match(/^[0-9a-f]{8,10}$/i) && !val.match(/[g-z]/i)) {
+            const decimal = parseInt(val, 16);
+            if (decimal > 1000000 && decimal < 3000000000) {
+              const date = new Date(decimal * 1000);
+              if (date.getFullYear() >= 2024 && date.getFullYear() <= 2030) {
+                fecha = date.toLocaleDateString('es-ES');
+                console.log("📅 Fecha desde hex:", val, "→", decimal, "→", fecha);
+                break;
+              }
+            }
           }
         }
       }
       
       if (!fecha) {
         fecha = new Date().toLocaleDateString('es-ES');
+        console.log("⚠️ No se encontró fecha, usando actual:", fecha);
       }
       
       const result = {
-        studentName: studentName || cleanStrings[0] || "Estudiante",
-        courseName: courseName || cleanStrings[1] || "Curso",
+        studentName: studentName || cleanItems[0] || "Estudiante",
+        courseName: courseName || cleanItems[1] || "Curso",
         nota: nota,
         fecha: fecha,
         cid: cid
@@ -242,6 +262,21 @@ export default function Home() {
     if (!cleanHash.startsWith('0x')) return 'Hash debe comenzar con 0x';
     if (!/^0x[0-9a-f]{64}$/.test(cleanHash)) return 'Hash contiene caracteres inválidos';
     return null;
+  };
+
+  // ========== FUNCIÓN PARA LLAMAR AL PROXY ==========
+  const callRPC = async (method, params) => {
+    const response = await fetch(SONIC_RPC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: method,
+        params: params,
+        id: 1
+      })
+    });
+    return await response.json();
   };
 
   // ========== EFECTOS ==========
@@ -299,33 +334,15 @@ export default function Home() {
   const checkNetworkStatus = async () => {
     setNetworkStatus('checking');
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
-      const response = await fetch(SONIC_RPC_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'eth_blockNumber',
-          params: [],
-          id: 1
-        }),
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.result) {
-          setNetworkStatus('connected');
-          return true;
-        }
+      const data = await callRPC('eth_blockNumber', []);
+      if (data.result) {
+        setNetworkStatus('connected');
+        return true;
       }
       setNetworkStatus('disconnected');
       return false;
     } catch (error) {
+      console.log('Error de conexión:', error);
       setNetworkStatus('disconnected');
       return false;
     }
@@ -347,18 +364,8 @@ export default function Home() {
     setAutoVerification(false);
 
     try {
-      const txResponse = await fetch(SONIC_RPC_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'eth_getTransactionByHash',
-          params: [transactionHash],
-          id: 1
-        })
-      });
-
-      const txData = await txResponse.json();
+      // Obtener la transacción usando el proxy
+      const txData = await callRPC('eth_getTransactionByHash', [transactionHash]);
 
       if (!txData.result) {
         throw new Error('Transacción no encontrada en Sonic Testnet');
@@ -371,24 +378,14 @@ export default function Home() {
         throw new Error('La transacción no contiene datos de certificado');
       }
 
-      const decodedData = decodeInputData(inputData, transactionHash);
+      const decodedData = decodeInputData(inputData);
 
       if (!decodedData || !decodedData.studentName) {
         throw new Error('No se pudieron extraer los datos del certificado');
       }
 
-      const receiptResponse = await fetch(SONIC_RPC_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'eth_getTransactionReceipt',
-          params: [transactionHash],
-          id: 1
-        })
-      });
-
-      const receiptData = await receiptResponse.json();
+      // Obtener el receipt
+      const receiptData = await callRPC('eth_getTransactionReceipt', [transactionHash]);
       const receipt = receiptData.result;
       const blockNumber = receipt ? parseInt(receipt.blockNumber, 16) : 0;
 
