@@ -38,49 +38,7 @@ export default function Home() {
     }
   };
 
-  // Extraer CID directamente del hex (método más confiable)
-  const extraerCIDDirecto = (dataHex) => {
-    // Decodificar todo el hex a texto
-    const textoCompleto = hexToString(dataHex);
-    console.log("📝 Texto completo para CID:", textoCompleto.substring(0, 100));
-    
-    // Buscar patrón de CID (bafy... o Qm...)
-    const patrones = [
-      /bafy[a-zA-Z0-9]{50,}/,
-      /Qm[1-9A-HJ-NP-Za-km-z]{44}/,
-      /bafk[a-zA-Z0-9]{50,}/
-    ];
-    
-    for (const patron of patrones) {
-      const match = textoCompleto.match(patron);
-      if (match && match[0].length > 40) {
-        console.log("🔗 CID encontrado con patrón:", match[0].substring(0, 30) + "...");
-        return match[0];
-      }
-    }
-    
-    // Método alternativo: buscar en el hex directamente
-    const hexCidPattern = /62616679626569656c696b726b67617767[a-f0-9]+/i;
-    const hexMatch = dataHex.match(hexCidPattern);
-    if (hexMatch) {
-      let cidDecodificado = '';
-      for (let i = 0; i < hexMatch[0].length; i += 2) {
-        const byte = hexMatch[0].substr(i, 2);
-        const charCode = parseInt(byte, 16);
-        if (charCode >= 97 && charCode <= 122) {
-          cidDecodificado += String.fromCharCode(charCode);
-        }
-      }
-      if (cidDecodificado.startsWith('bafy')) {
-        console.log("🔗 CID encontrado en hex:", cidDecodificado);
-        return cidDecodificado;
-      }
-    }
-    
-    return "";
-  };
-
-  // DECODIFICAR EL INPUT DATA
+  // Decodificar INPUT DATA completa sin fragmentar
   const decodeInputData = (inputData) => {
     console.log("🔍 Decodificando input data:", inputData);
     
@@ -90,149 +48,104 @@ export default function Home() {
     
     try {
       const dataHex = inputData.slice(10);
-      console.log("📝 DataHex sin selector (primeros 100 chars):", dataHex.substring(0, 100));
+      console.log("📝 DataHex (primeros 100 chars):", dataHex.substring(0, 100));
       
-      // ========== EXTRAER CID DIRECTAMENTE DEL HEX ==========
-      let cid = extraerCIDDirecto(dataHex);
-      console.log("🔗 CID extraído:", cid ? cid.substring(0, 30) + "..." : "NO ENCONTRADO");
-      
-      // ========== EXTRAER FECHA DIRECTAMENTE DEL HEX ==========
-      let fechaEncontrada = "";
-      
-      // Buscar timestamp en formato hex (8 caracteres) dentro del dataHex
-      const hexPattern = /[0-9a-f]{8}/gi;
-      let match;
-      const hexMatches = [];
-      while ((match = hexPattern.exec(dataHex)) !== null) {
-        hexMatches.push(match[0]);
-      }
-      
-      console.log("🔢 Valores hex encontrados:", hexMatches);
-      
-      for (const hexVal of hexMatches) {
-        if (hexVal.toLowerCase().startsWith('baf')) continue;
-        
-        const decimal = parseInt(hexVal, 16);
-        if (decimal > 1700000000 && decimal < 1800000000) {
-          fechaEncontrada = new Date(decimal * 1000).toLocaleDateString('es-ES');
-          console.log("📅 Fecha encontrada por hex:", hexVal, "→", decimal, "→", fechaEncontrada);
-          break;
-        }
-      }
-      
-      // ========== EXTRAER TEXTOS ==========
-      const allItems = [];
-      let currentItem = '';
-      let currentType = null;
-      
+      // ========== CONVERTIR TODO EL HEX A TEXTO LEGIBLE ==========
+      let textoCompleto = '';
       for (let i = 0; i < dataHex.length; i += 2) {
         const byte = dataHex.substr(i, 2);
         const code = parseInt(byte, 16);
-        
-        if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 32 || code === 45 || code === 95 || code === 47) {
-          if (currentType === 'number' && currentItem.length > 0) {
-            allItems.push(currentItem);
-            currentItem = '';
-          }
-          currentType = 'text';
-          currentItem += String.fromCharCode(code);
+        if (code >= 32 && code <= 126) {
+          textoCompleto += String.fromCharCode(code);
+        } else if (code === 0) {
+          textoCompleto += ' ';
         }
-        else if (code >= 48 && code <= 57) {
-          if (currentType === 'text' && currentItem.length > 0) {
-            allItems.push(currentItem);
-            currentItem = '';
-          }
-          currentType = 'number';
-          currentItem += String.fromCharCode(code);
-        }
-        else {
-          if (currentItem.length > 0) {
-            allItems.push(currentItem);
-            currentItem = '';
-          }
-          currentType = null;
+      }
+      console.log("📝 TEXTO COMPLETO DECODIFICADO:", textoCompleto);
+      
+      // ========== EXTRAER DATOS CON EXPRESIONES REGULARES ==========
+      
+      // 1. Extraer CID (bafy... o Qm...)
+      let cid = "";
+      const cidMatch = textoCompleto.match(/bafy[a-zA-Z0-9]{50,}/i);
+      if (cidMatch) {
+        cid = cidMatch[0];
+        console.log("🔗 CID encontrado:", cid);
+      }
+      if (!cid) {
+        const qmMatch = textoCompleto.match(/Qm[1-9A-HJ-NP-Za-km-z]{44}/);
+        if (qmMatch) {
+          cid = qmMatch[0];
+          console.log("🔗 CID (Qm) encontrado:", cid);
         }
       }
       
-      if (currentItem.length > 0) {
-        allItems.push(currentItem);
-      }
-      
-      console.log("📝 Items encontrados:", allItems);
-      
-      const cleanItems = allItems.filter(s => s.length > 0 && s !== '00' && s !== '0' && s.length > 1);
-      console.log("📝 Items limpios:", cleanItems);
-      
+      // 2. Extraer NOMBRE (primer texto con al menos 2 letras mayúsculas o palabras)
       let studentName = "";
+      const nombreMatch = textoCompleto.match(/^([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)/);
+      if (nombreMatch) {
+        studentName = nombreMatch[1];
+        console.log("👤 Nombre encontrado:", studentName);
+      }
+      
+      // 3. Extraer CURSO (texto después del nombre, antes de la nota o fecha)
       let courseName = "";
+      if (studentName) {
+        const resto = textoCompleto.substring(studentName.length);
+        const cursoMatch = resto.match(/\s+([A-Za-z\s]+?)(?=\s+(?:excelente|aprobado|reprobado|reprobó|desaprobado|\b\d{1,3}\b|\b\d{1,2}\/\d{1,2}\/\d{4}\b))/i);
+        if (cursoMatch) {
+          courseName = cursoMatch[1].trim();
+          console.log("📚 Curso encontrado:", courseName);
+        }
+      }
+      
+      // 4. Extraer NOTA (excelente, aprobado, reprobado, o número)
       let nota = "Aprobado";
-      let fecha = fechaEncontrada;
-      
-      // ORDEN CORRECTO: nombre, curso, nota, fecha
-      for (let i = 0; i < cleanItems.length; i++) {
-        const val = cleanItems[i];
-        if (val.length > 2 && !studentName && !val.startsWith('baf') && isNaN(parseInt(val))) {
-          studentName = val;
-          break;
-        }
-      }
-      
-      let foundStudent = false;
-      for (let i = 0; i < cleanItems.length; i++) {
-        const val = cleanItems[i];
-        if (val === studentName) {
-          foundStudent = true;
-          continue;
-        }
-        if (foundStudent && !courseName && val.length > 2 && !val.startsWith('baf') && isNaN(parseInt(val))) {
-          courseName = val;
-          break;
-        }
-      }
-      
-      let foundCourse = false;
-      for (let i = 0; i < cleanItems.length; i++) {
-        const val = cleanItems[i];
-        if (val === courseName) {
-          foundCourse = true;
-          continue;
-        }
-        if (foundCourse && nota === "Aprobado" && val !== cid && !val.startsWith('baf') && val !== studentName && val !== courseName) {
-          nota = val;
+      const notaPatterns = [
+        /excelente/i, /aprobado/i, /reprobado/i, /reprobó/i, /desaprobado/i,
+        /\b([0-9]{1,3})\b/
+      ];
+      for (const pattern of notaPatterns) {
+        const match = textoCompleto.match(pattern);
+        if (match) {
+          nota = match[0];
           console.log("⭐ Nota encontrada:", nota);
           break;
         }
       }
       
+      // 5. Extraer FECHA (desde el hex original - timestamp)
+      let fecha = "";
+      const hexPattern = /[0-9a-f]{8}/gi;
+      let hexMatch;
+      while ((hexMatch = hexPattern.exec(dataHex)) !== null) {
+        const hexVal = hexMatch[0];
+        if (hexVal.toLowerCase().startsWith('baf')) continue;
+        const decimal = parseInt(hexVal, 16);
+        if (decimal > 1700000000 && decimal < 1800000000) {
+          fecha = new Date(decimal * 1000).toLocaleDateString('es-ES');
+          console.log("📅 Fecha encontrada por timestamp:", decimal, "→", fecha);
+          break;
+        }
+      }
+      
+      // Si no se encontró timestamp, buscar fecha en texto (formato DD/MM/YYYY)
       if (!fecha) {
-        for (let i = 0; i < cleanItems.length; i++) {
-          const val = cleanItems[i];
-          const num = parseInt(val);
-          if (!isNaN(num) && val.length === 10 && num > 1700000000 && num < 1800000000) {
-            fecha = new Date(num * 1000).toLocaleDateString('es-ES');
-            console.log("📅 Fecha encontrada por timestamp:", num, "→", fecha);
-            break;
-          }
+        const fechaMatch = textoCompleto.match(/\b(\d{1,2}\/\d{1,2}\/\d{4})\b/);
+        if (fechaMatch) {
+          fecha = fechaMatch[1];
+          console.log("📅 Fecha encontrada en texto:", fecha);
         }
       }
       
       if (!fecha) {
         fecha = new Date().toLocaleDateString('es-ES');
-      }
-      
-      // Si no se encontró CID, intentar una última vez con el texto completo
-      if (!cid || cid.length < 40) {
-        const textoCompleto = hexToString(dataHex);
-        const cidLargoMatch = textoCompleto.match(/bafy[a-z0-9]{50,}/i);
-        if (cidLargoMatch) {
-          cid = cidLargoMatch[0];
-          console.log("🔗 CID encontrado en texto completo:", cid.substring(0, 30) + "...");
-        }
+        console.log("⚠️ Usando fecha actual:", fecha);
       }
       
       const result = {
-        studentName: studentName || cleanItems[0] || "Estudiante",
-        courseName: courseName || cleanItems[1] || "Curso",
+        studentName: studentName || "Estudiante",
+        courseName: courseName || "Curso",
         nota: nota,
         fecha: fecha,
         cid: cid || ""
@@ -264,7 +177,6 @@ export default function Home() {
   const isLikelyCID = (hash) => {
     if (!hash) return false;
     const cleanHash = formatCID(hash);
-    // Un CID válido tiene al menos 40 caracteres
     return (cleanHash.startsWith('Qm') || cleanHash.startsWith('baf')) && cleanHash.length > 40;
   };
 
@@ -663,7 +575,6 @@ export default function Home() {
               <div style={{ ...styles.detailValue, color: '#059669', fontWeight: 'bold' }}>{result.certificateData.nota}</div>
             </div>
             
-            {/* Botón de PDF - siempre visible si hay CID (aunque sea parcial) */}
             {result.certificateData.ipfsHash && result.certificateData.ipfsHash.length > 5 && (
               <div style={styles.detailRow}>
                 <div style={styles.detailLabel}>📄 Certificado PDF:</div>
@@ -689,7 +600,6 @@ export default function Home() {
               </div>
             )}
             
-            {/* Mensaje si no hay CID */}
             {(!result.certificateData.ipfsHash || result.certificateData.ipfsHash.length <= 5) && (
               <div style={styles.detailRow}>
                 <div style={styles.detailLabel}>📄 Certificado PDF:</div>
