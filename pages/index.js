@@ -12,7 +12,8 @@ export default function Home() {
 
   // CONFIGURACIÓN
   const CONTRACT_ADDRESS = "0x0196fb4ac891F47CC194AB5D6b0419C8e709085f";
-  const SONIC_RPC_URL = "https://rpc.testnet.soniclabs.com";
+  //const SONIC_RPC_URL = "https://rpc.testnet.soniclabs.com";
+  const SONIC_RPC_URL = "https://rpc.sonic-testnet.xyz";
   const SONIC_EXPLORER = "https://testnet.soniclabs.com/tx";
 
   // Hashes de ejemplo
