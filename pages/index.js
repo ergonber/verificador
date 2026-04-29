@@ -38,6 +38,26 @@ export default function Home() {
     }
   };
 
+  // Extraer CID directamente del hex (método más confiable)
+  const extraerCIDDirecto = (dataHex) => {
+    // Decodificar todo el hex a texto
+    const textoCompleto = hexToString(dataHex);
+    // Buscar patrón de CID (bafy... o Qm...)
+    const patrones = [
+      /bafy[a-zA-Z0-9]{50,}/,
+      /Qm[1-9A-HJ-NP-Za-km-z]{44}/,
+      /bafk[a-zA-Z0-9]{50,}/
+    ];
+    
+    for (const patron of patrones) {
+      const match = textoCompleto.match(patron);
+      if (match) {
+        return match[0];
+      }
+    }
+    return "";
+  };
+
   // DECODIFICAR EL INPUT DATA - ORDEN CORREGIDO: nombre, curso, nota, fecha, CID
   const decodeInputData = (inputData) => {
     console.log("🔍 Decodificando input data:", inputData);
@@ -50,7 +70,15 @@ export default function Home() {
       const dataHex = inputData.slice(10);
       console.log("📝 DataHex sin selector:", dataHex);
       
-      // ========== EXTRAER FECHA DIRECTAMENTE DEL HEX (MÉTODO MÁS CONFIABLE) ==========
+      // ========== EXTRAER CID DIRECTAMENTE DEL HEX (MÉTODO MÁS CONFIABLE) ==========
+      let cid = "";
+      const cidDirecto = extraerCIDDirecto(dataHex);
+      if (cidDirecto) {
+        cid = cidDirecto;
+        console.log("🔗 CID extraído directamente:", cid);
+      }
+      
+      // ========== EXTRAER FECHA DIRECTAMENTE DEL HEX ==========
       let fechaEncontrada = "";
       
       // Buscar timestamp en formato hex (8 caracteres) dentro del dataHex
@@ -127,7 +155,6 @@ export default function Home() {
       let courseName = "";
       let nota = "Aprobado";
       let fecha = fechaEncontrada;
-      let cid = "";
       
       // ORDEN CORRECTO: nombre, curso, nota, fecha (timestamp), CID
       
@@ -154,17 +181,7 @@ export default function Home() {
         }
       }
       
-      // 3. Buscar CID (empieza con bafy o Qm)
-      for (let i = 0; i < cleanItems.length; i++) {
-        const val = cleanItems[i];
-        if (val.startsWith('bafy') || val.startsWith('Qm') || (val.startsWith('baf') && val.length > 30)) {
-          cid = val;
-          console.log("🔗 CID encontrado:", cid.substring(0, 30) + "...");
-          break;
-        }
-      }
-      
-      // 4. Buscar NOTA (tercer campo - después del curso, antes del CID)
+      // 3. Buscar NOTA (tercer campo - después del curso)
       let foundCourse = false;
       for (let i = 0; i < cleanItems.length; i++) {
         const val = cleanItems[i];
@@ -173,7 +190,6 @@ export default function Home() {
           continue;
         }
         if (foundCourse && nota === "Aprobado" && val !== cid && !val.startsWith('baf') && val !== studentName && val !== courseName) {
-          // La nota puede ser texto como "excelente" o número como "67"
           nota = val;
           console.log("⭐ Nota encontrada:", nota);
           break;
