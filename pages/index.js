@@ -50,57 +50,83 @@ export default function Home() {
       const dataHex = inputData.slice(10);
       console.log("📝 DataHex sin selector:", dataHex);
       
-      // Extraer todos los strings y números
+      // ========== EXTRAER FECHA DIRECTAMENTE DEL HEX (MÉTODO MÁS CONFIABLE) ==========
+      let fechaEncontrada = "";
+      
+      // Buscar timestamp en formato hex (8 caracteres) dentro del dataHex
+      const hexPattern = /[0-9a-f]{8}/gi;
+      let match;
+      const hexMatches = [];
+      while ((match = hexPattern.exec(dataHex)) !== null) {
+        hexMatches.push(match[0]);
+      }
+      
+      console.log("🔢 Valores hex encontrados:", hexMatches);
+      
+      for (const hexVal of hexMatches) {
+        // Ignorar si parece parte de un CID (empieza con baf...)
+        if (hexVal.toLowerCase().startsWith('baf')) continue;
+        
+        const decimal = parseInt(hexVal, 16);
+        // Timestamp en segundos para fechas 2024-2026 (entre 1.7B y 1.8B)
+        if (decimal > 1700000000 && decimal < 1800000000) {
+          fechaEncontrada = new Date(decimal * 1000).toLocaleDateString('es-ES');
+          console.log("📅 Fecha encontrada por hex:", hexVal, "→", decimal, "→", fechaEncontrada);
+          break;
+        }
+      }
+      
+      // ========== EXTRAER TEXTOS Y NÚMEROS PRESERVANDO NÚMEROS COMPLETOS ==========
       const allItems = [];
-      let currentText = '';
-      let currentNumber = '';
+      let currentItem = '';
+      let currentType = null; // 'text' or 'number'
       
       for (let i = 0; i < dataHex.length; i += 2) {
         const byte = dataHex.substr(i, 2);
         const code = parseInt(byte, 16);
         
-        // Letras, espacios, guiones
+        // Letras, espacios, guiones, barras (texto)
         if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 32 || code === 45 || code === 95 || code === 47) {
-          if (currentNumber.length > 0) {
-            allItems.push(currentNumber);
-            currentNumber = '';
+          if (currentType === 'number' && currentItem.length > 0) {
+            allItems.push(currentItem);
+            currentItem = '';
           }
-          currentText += String.fromCharCode(code);
+          currentType = 'text';
+          currentItem += String.fromCharCode(code);
         }
-        // Números
+        // Números (0-9)
         else if (code >= 48 && code <= 57) {
-          if (currentText.length > 0) {
-            allItems.push(currentText);
-            currentText = '';
+          if (currentType === 'text' && currentItem.length > 0) {
+            allItems.push(currentItem);
+            currentItem = '';
           }
-          currentNumber += String.fromCharCode(code);
+          currentType = 'number';
+          currentItem += String.fromCharCode(code);
         }
-        // Otros caracteres (separadores)
+        // Otros caracteres (separadores, nulos)
         else {
-          if (currentText.length > 0) {
-            if (currentText.length > 1) allItems.push(currentText);
-            currentText = '';
+          if (currentItem.length > 0) {
+            allItems.push(currentItem);
+            currentItem = '';
           }
-          if (currentNumber.length > 0) {
-            allItems.push(currentNumber);
-            currentNumber = '';
-          }
+          currentType = null;
         }
       }
       
-      if (currentText.length > 1) allItems.push(currentText);
-      if (currentNumber.length > 0) allItems.push(currentNumber);
+      if (currentItem.length > 0) {
+        allItems.push(currentItem);
+      }
       
       console.log("📝 Items encontrados:", allItems);
       
-      // Limpiar items vacíos
-      const cleanItems = allItems.filter(s => s.length > 0 && s !== '00' && s !== '0' && s !== '');
+      // Limpiar items vacíos y muy cortos
+      const cleanItems = allItems.filter(s => s.length > 0 && s !== '00' && s !== '0' && s.length > 1);
       console.log("📝 Items limpios:", cleanItems);
       
       let studentName = "";
       let courseName = "";
       let nota = "Aprobado";
-      let fecha = "";
+      let fecha = fechaEncontrada;
       let cid = "";
       
       // ORDEN CORRECTO: nombre, curso, nota, fecha (timestamp), CID
@@ -128,7 +154,7 @@ export default function Home() {
         }
       }
       
-      // 3. Buscar CID (quinto campo - empieza con bafy)
+      // 3. Buscar CID (empieza con bafy o Qm)
       for (let i = 0; i < cleanItems.length; i++) {
         const val = cleanItems[i];
         if (val.startsWith('bafy') || val.startsWith('Qm') || (val.startsWith('baf') && val.length > 30)) {
@@ -147,40 +173,26 @@ export default function Home() {
           continue;
         }
         if (foundCourse && nota === "Aprobado" && val !== cid && !val.startsWith('baf') && val !== studentName && val !== courseName) {
+          // La nota puede ser texto como "excelente" o número como "67"
           nota = val;
           console.log("⭐ Nota encontrada:", nota);
           break;
         }
       }
       
-      // 5. Buscar FECHA (timestamp - número de 10 dígitos, cuarto campo)
-      for (let i = 0; i < cleanItems.length; i++) {
-        const val = cleanItems[i];
-        const num = parseInt(val);
-        // Timestamp en segundos (10 dígitos, entre 1.7M y 1.8M para fechas 2024-2026)
-        if (val.length >= 9 && val.length <= 10 && !isNaN(num) && num > 1700000000 && num < 1800000000) {
-          fecha = new Date(num * 1000).toLocaleDateString('es-ES');
-          console.log("📅 Fecha desde timestamp:", num, "→", fecha);
-          break;
-        }
-      }
-      
-      // Si no se encontró fecha, intentar con hex
+      // Si no se encontró fecha por hex, intentar con timestamp en cleanItems
       if (!fecha) {
         for (let i = 0; i < cleanItems.length; i++) {
           const val = cleanItems[i];
-          if (val.match(/^[0-9a-f]{8,10}$/i) && !val.match(/[g-z]/i)) {
-            const decimal = parseInt(val, 16);
-            if (decimal > 1700000000 && decimal < 1800000000) {
-              fecha = new Date(decimal * 1000).toLocaleDateString('es-ES');
-              console.log("📅 Fecha desde hex:", val, "→", decimal, "→", fecha);
-              break;
-            }
+          const num = parseInt(val);
+          if (!isNaN(num) && val.length === 10 && num > 1700000000 && num < 1800000000) {
+            fecha = new Date(num * 1000).toLocaleDateString('es-ES');
+            console.log("📅 Fecha encontrada por timestamp:", num, "→", fecha);
+            break;
           }
         }
       }
       
-      // Si no se encontró fecha, usar la actual
       if (!fecha) {
         fecha = new Date().toLocaleDateString('es-ES');
         console.log("⚠️ No se encontró fecha, usando actual:", fecha);
