@@ -12,7 +12,7 @@ export default function Home() {
 
   // CONFIGURACIÓN - USANDO PROXY PARA EVITAR CORS
   const CONTRACT_ADDRESS = "0x0196fb4ac891F47CC194AB5D6b0419C8e709085f";
-  const SONIC_RPC_URL = "/api/rpc";  // ✅ Usa el proxy local
+  const SONIC_RPC_URL = "/api/rpc";
   const SONIC_EXPLORER = "https://testnet.soniclabs.com/tx";
 
   // Hashes de ejemplo
@@ -38,20 +38,7 @@ export default function Home() {
     }
   };
 
-  // Convertir timestamp en segundos a fecha legible
-  const timestampToDate = (timestamp) => {
-    if (!timestamp) return "";
-    let ts = parseInt(timestamp);
-    if (isNaN(ts)) return "";
-    if (ts < 10000000000) {
-      ts = ts * 1000;
-    }
-    const date = new Date(ts);
-    if (date.getFullYear() < 2020) return "";
-    return date.toLocaleDateString('es-ES');
-  };
-
-  // DECODIFICAR EL INPUT DATA - IGNORA EL SELECTOR
+  // DECODIFICAR EL INPUT DATA - ORDEN CORREGIDO: nombre, curso, nota, fecha, CID
   const decodeInputData = (inputData) => {
     console.log("🔍 Decodificando input data:", inputData);
     
@@ -63,6 +50,7 @@ export default function Home() {
       const dataHex = inputData.slice(10);
       console.log("📝 DataHex sin selector:", dataHex);
       
+      // Extraer todos los strings y números
       const allItems = [];
       let currentText = '';
       let currentNumber = '';
@@ -71,6 +59,7 @@ export default function Home() {
         const byte = dataHex.substr(i, 2);
         const code = parseInt(byte, 16);
         
+        // Letras, espacios, guiones
         if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 32 || code === 45 || code === 95 || code === 47) {
           if (currentNumber.length > 0) {
             allItems.push(currentNumber);
@@ -78,6 +67,7 @@ export default function Home() {
           }
           currentText += String.fromCharCode(code);
         }
+        // Números
         else if (code >= 48 && code <= 57) {
           if (currentText.length > 0) {
             allItems.push(currentText);
@@ -85,6 +75,7 @@ export default function Home() {
           }
           currentNumber += String.fromCharCode(code);
         }
+        // Otros caracteres (separadores)
         else {
           if (currentText.length > 0) {
             if (currentText.length > 1) allItems.push(currentText);
@@ -102,7 +93,8 @@ export default function Home() {
       
       console.log("📝 Items encontrados:", allItems);
       
-      const cleanItems = allItems.filter(s => s.length > 0 && s !== '00' && s !== '0');
+      // Limpiar items vacíos
+      const cleanItems = allItems.filter(s => s.length > 0 && s !== '00' && s !== '0' && s !== '');
       console.log("📝 Items limpios:", cleanItems);
       
       let studentName = "";
@@ -111,16 +103,18 @@ export default function Home() {
       let fecha = "";
       let cid = "";
       
-      // Buscar nombre
+      // ORDEN CORRECTO: nombre, curso, nota, fecha (timestamp), CID
+      
+      // 1. Buscar NOMBRE (primer texto largo)
       for (let i = 0; i < cleanItems.length; i++) {
         const val = cleanItems[i];
-        if (val.length > 3 && !studentName && !val.startsWith('baf') && !val.startsWith('Qm') && isNaN(parseInt(val))) {
+        if (val.length > 2 && !studentName && !val.startsWith('baf') && isNaN(parseInt(val))) {
           studentName = val;
           break;
         }
       }
       
-      // Buscar curso
+      // 2. Buscar CURSO (segundo texto largo)
       let foundStudent = false;
       for (let i = 0; i < cleanItems.length; i++) {
         const val = cleanItems[i];
@@ -128,83 +122,65 @@ export default function Home() {
           foundStudent = true;
           continue;
         }
-        if (foundStudent && val.length > 3 && !val.startsWith('baf') && !val.startsWith('Qm') && isNaN(parseInt(val))) {
+        if (foundStudent && !courseName && val.length > 2 && !val.startsWith('baf') && isNaN(parseInt(val))) {
           courseName = val;
           break;
         }
       }
       
-      // Buscar CID
+      // 3. Buscar CID (quinto campo - empieza con bafy)
       for (let i = 0; i < cleanItems.length; i++) {
         const val = cleanItems[i];
         if (val.startsWith('bafy') || val.startsWith('Qm') || (val.startsWith('baf') && val.length > 30)) {
           cid = val;
+          console.log("🔗 CID encontrado:", cid.substring(0, 30) + "...");
           break;
         }
       }
       
-      // Buscar nota
+      // 4. Buscar NOTA (tercer campo - después del curso, antes del CID)
+      let foundCourse = false;
       for (let i = 0; i < cleanItems.length; i++) {
         const val = cleanItems[i];
-        if (val !== studentName && val !== courseName && val !== cid && val.length < 20) {
-          const lowerVal = val.toLowerCase();
-          const numVal = parseInt(val);
-          if (lowerVal === 'reprobado' || lowerVal === 'aprobado' || lowerVal === 'excelente' || 
-              lowerVal === 'bueno' || lowerVal === 'regular' || (!isNaN(numVal) && numVal >= 0 && numVal <= 100)) {
-            nota = val;
-            break;
-          }
+        if (val === courseName) {
+          foundCourse = true;
+          continue;
         }
-      }
-      
-      // ========== DETECCIÓN AUTOMÁTICA DE FECHA ==========
-      // Método 1: Buscar string con formato DD/MM/YYYY
-      for (let i = 0; i < cleanItems.length; i++) {
-        const val = cleanItems[i];
-        const dateMatch = val.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-        if (dateMatch) {
-          fecha = val;
-          console.log("📅 Fecha encontrada como string:", fecha);
+        if (foundCourse && nota === "Aprobado" && val !== cid && !val.startsWith('baf') && val !== studentName && val !== courseName) {
+          nota = val;
+          console.log("⭐ Nota encontrada:", nota);
           break;
         }
       }
       
-      // Método 2: Buscar timestamp en segundos (número de 10 dígitos)
-      if (!fecha) {
-        for (let i = 0; i < cleanItems.length; i++) {
-          const val = cleanItems[i];
-          if (val.length >= 9 && val.length <= 10 && !isNaN(parseInt(val))) {
-            const timestamp = parseInt(val);
-            if (timestamp > 1000000 && timestamp < 3000000000) {
-              const date = new Date(timestamp * 1000);
-              if (date.getFullYear() >= 2024 && date.getFullYear() <= 2030) {
-                fecha = date.toLocaleDateString('es-ES');
-                console.log("📅 Fecha desde timestamp (10 dígitos):", timestamp, "→", fecha);
-                break;
-              }
-            }
-          }
+      // 5. Buscar FECHA (timestamp - número de 10 dígitos, cuarto campo)
+      for (let i = 0; i < cleanItems.length; i++) {
+        const val = cleanItems[i];
+        const num = parseInt(val);
+        // Timestamp en segundos (10 dígitos, entre 1.7M y 1.8M para fechas 2024-2026)
+        if (val.length >= 9 && val.length <= 10 && !isNaN(num) && num > 1700000000 && num < 1800000000) {
+          fecha = new Date(num * 1000).toLocaleDateString('es-ES');
+          console.log("📅 Fecha desde timestamp:", num, "→", fecha);
+          break;
         }
       }
       
-      // Método 3: Buscar timestamp en formato hex
+      // Si no se encontró fecha, intentar con hex
       if (!fecha) {
         for (let i = 0; i < cleanItems.length; i++) {
           const val = cleanItems[i];
           if (val.match(/^[0-9a-f]{8,10}$/i) && !val.match(/[g-z]/i)) {
             const decimal = parseInt(val, 16);
-            if (decimal > 1000000 && decimal < 3000000000) {
-              const date = new Date(decimal * 1000);
-              if (date.getFullYear() >= 2024 && date.getFullYear() <= 2030) {
-                fecha = date.toLocaleDateString('es-ES');
-                console.log("📅 Fecha desde hex:", val, "→", decimal, "→", fecha);
-                break;
-              }
+            if (decimal > 1700000000 && decimal < 1800000000) {
+              fecha = new Date(decimal * 1000).toLocaleDateString('es-ES');
+              console.log("📅 Fecha desde hex:", val, "→", decimal, "→", fecha);
+              break;
             }
           }
         }
       }
       
+      // Si no se encontró fecha, usar la actual
       if (!fecha) {
         fecha = new Date().toLocaleDateString('es-ES');
         console.log("⚠️ No se encontró fecha, usando actual:", fecha);
