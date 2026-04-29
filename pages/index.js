@@ -1,4 +1,4 @@
-// pages/index.js - VERSIÓN DEFINITIVA (decodificación correcta por ABI)
+// pages/index.js - VERIFICADOR DEFINITIVO
 import { useState, useEffect } from 'react';
 
 export default function Home() {
@@ -22,11 +22,10 @@ export default function Home() {
     if (!inputData || inputData === '0x') return null;
     
     try {
-      // Remover el selector de función (4 bytes = 8 caracteres hex)
       let data = inputData.slice(10);
-      console.log("📝 DataHex:", data);
+      console.log("📝 DataHex:", data.substring(0, 200));
       
-      // Leer los 4 offsets (cada uno 32 bytes = 64 caracteres hex)
+      // Leer los 5 offsets (cada uno 32 bytes = 64 caracteres hex)
       const offset1 = parseInt(data.substring(0, 64), 16);
       const offset2 = parseInt(data.substring(64, 128), 16);
       const offset3 = parseInt(data.substring(128, 192), 16);
@@ -35,18 +34,15 @@ export default function Home() {
       
       console.log("📍 Offsets:", { offset1, offset2, offset3, offset4, offset5 });
       
-      // Función para leer un string en una posición (offset en bytes, multiplicar por 2 para chars)
+      // Función para leer string en una posición
       const readString = (offset) => {
         if (offset === 0) return "";
         const startPos = offset * 2;
-        // Leer longitud del string (32 bytes = 64 chars)
         const lengthHex = data.substring(startPos, startPos + 64);
         const length = parseInt(lengthHex, 16);
         if (length === 0 || length > 200) return "";
-        // Leer el string (cada char = 2 bytes hex)
         const stringStart = startPos + 64;
         const stringHex = data.substring(stringStart, stringStart + (length * 2));
-        // Convertir hex a texto
         let result = "";
         for (let i = 0; i < stringHex.length; i += 2) {
           const byte = stringHex.substr(i, 2);
@@ -60,22 +56,29 @@ export default function Home() {
       const studentName = readString(offset1);
       const courseName = readString(offset2);
       const nota = readString(offset3);
-      const timestamp = parseInt(data.substring(offset4 * 2, offset4 * 2 + 64), 16);
       const cid = readString(offset5);
       
-      // Convertir timestamp a fecha
+      // Leer el timestamp (está en el offset4)
       let fecha = "";
-      if (timestamp > 1700000000 && timestamp < 1800000000) {
-        fecha = new Date(timestamp * 1000).toLocaleDateString('es-ES');
-      } else {
-        fecha = new Date().toLocaleDateString('es-ES');
+      if (offset4 > 0) {
+        const timestampHex = data.substring(offset4 * 2, offset4 * 2 + 64);
+        const timestamp = parseInt(timestampHex, 16);
+        console.log("📅 Timestamp hex:", timestampHex, "→ decimal:", timestamp);
+        if (timestamp > 1700000000 && timestamp < 1800000000) {
+          const fechaObj = new Date(timestamp * 1000);
+          fecha = fechaObj.toLocaleDateString('es-ES');
+          console.log("📅 Fecha calculada:", fecha);
+        }
       }
       
-      console.log("✅ Datos decodificados por ABI:", {
-        studentName, courseName, nota, fecha, cid
-      });
+      if (!fecha) {
+        fecha = new Date().toLocaleDateString('es-ES');
+        console.log("⚠️ Usando fecha actual:", fecha);
+      }
       
-      return { studentName, courseName, nota, fecha, cid };
+      const result = { studentName, courseName, nota, fecha, cid };
+      console.log("✅ Datos decodificados:", result);
+      return result;
       
     } catch (error) {
       console.error("Error decodificando ABI:", error);
@@ -101,6 +104,7 @@ export default function Home() {
     }
     const cleanCID = formatCID(cid);
     const pdfUrl = `https://gateway.pinata.cloud/ipfs/${cleanCID}`;
+    console.log("🔗 Abriendo PDF:", pdfUrl);
     window.open(pdfUrl, '_blank', 'noopener,noreferrer');
   };
 
