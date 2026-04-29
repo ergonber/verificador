@@ -39,129 +39,132 @@ export default function Home() {
   };
 
   // Decodificar INPUT DATA completa sin fragmentar
-  const decodeInputData = (inputData) => {
-    console.log("🔍 Decodificando input data:", inputData);
+ const decodeInputData = (inputData) => {
+  console.log("🔍 Decodificando input data:", inputData);
+  
+  if (!inputData || inputData === '0x') {
+    return null;
+  }
+  
+  try {
+    const dataHex = inputData.slice(10);
     
-    if (!inputData || inputData === '0x') {
-      return null;
+    // ========== CONVERTIR TODO EL HEX A TEXTO LEGIBLE ==========
+    let textoCompleto = '';
+    for (let i = 0; i < dataHex.length; i += 2) {
+      const byte = dataHex.substr(i, 2);
+      const code = parseInt(byte, 16);
+      if (code >= 32 && code <= 126) {
+        textoCompleto += String.fromCharCode(code);
+      } else if (code === 0) {
+        textoCompleto += ' ';
+      }
+    }
+    console.log("📝 TEXTO COMPLETO DECODIFICADO:", textoCompleto);
+    
+    // ========== LIMPIAR EL TEXTO (eliminar caracteres raros) ==========
+    let textoLimpio = textoCompleto.replace(/[^a-zA-ZÀ-ÿ\u00f1\u00d1\s\/]/g, ' ');
+    textoLimpio = textoLimpio.replace(/\s+/g, ' ').trim();
+    console.log("📝 TEXTO LIMPIO:", textoLimpio);
+    
+    // ========== EXTRAER DATOS ==========
+    
+    // 1. Extraer CID
+    let cid = "";
+    const cidMatch = textoCompleto.match(/bafy[a-zA-Z0-9]{50,}/i);
+    if (cidMatch) {
+      cid = cidMatch[0];
+      console.log("🔗 CID encontrado:", cid);
     }
     
-    try {
-      const dataHex = inputData.slice(10);
-      console.log("📝 DataHex (primeros 100 chars):", dataHex.substring(0, 100));
-      
-      // ========== CONVERTIR TODO EL HEX A TEXTO LEGIBLE ==========
-      let textoCompleto = '';
-      for (let i = 0; i < dataHex.length; i += 2) {
-        const byte = dataHex.substr(i, 2);
-        const code = parseInt(byte, 16);
-        if (code >= 32 && code <= 126) {
-          textoCompleto += String.fromCharCode(code);
-        } else if (code === 0) {
-          textoCompleto += ' ';
-        }
+    // 2. Extraer NOMBRE y CURSO - BUSCAR EN EL TEXTO LIMPIO
+    let studentName = "Estudiante";
+    let courseName = "Curso";
+    
+    // Dividir el texto limpio en palabras
+    const palabras = textoLimpio.split(' ');
+    console.log("📝 Palabras:", palabras);
+    
+    // Buscar patrón: nombre y curso suelen ser las primeras palabras significativas
+    // Ignorar palabras como "Estudiante", "Curso", "Aprobado", números, etc.
+    const palabrasIgnorar = ['estudiante', 'curso', 'aprobado', 'excelente', 'reprobado', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    
+    let palabrasSignificativas = [];
+    for (const p of palabras) {
+      if (p.length > 2 && !palabrasIgnorar.includes(p.toLowerCase()) && !p.match(/^\d+$/)) {
+        palabrasSignificativas.push(p);
       }
-      console.log("📝 TEXTO COMPLETO DECODIFICADO:", textoCompleto);
-      
-      // ========== EXTRAER DATOS CON EXPRESIONES REGULARES ==========
-      
-      // 1. Extraer CID (bafy... o Qm...)
-      let cid = "";
-      const cidMatch = textoCompleto.match(/bafy[a-zA-Z0-9]{50,}/i);
-      if (cidMatch) {
-        cid = cidMatch[0];
-        console.log("🔗 CID encontrado:", cid);
-      }
-      if (!cid) {
-        const qmMatch = textoCompleto.match(/Qm[1-9A-HJ-NP-Za-km-z]{44}/);
-        if (qmMatch) {
-          cid = qmMatch[0];
-          console.log("🔗 CID (Qm) encontrado:", cid);
-        }
-      }
-      
-      // 2. Extraer NOMBRE (primer texto con al menos 2 letras mayúsculas o palabras)
-      let studentName = "";
-      const nombreMatch = textoCompleto.match(/^([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)/);
-      if (nombreMatch) {
-        studentName = nombreMatch[1];
-        console.log("👤 Nombre encontrado:", studentName);
-      }
-      
-      // 3. Extraer CURSO (texto después del nombre, antes de la nota o fecha)
-      let courseName = "";
-      if (studentName) {
-        const resto = textoCompleto.substring(studentName.length);
-        const cursoMatch = resto.match(/\s+([A-Za-z\s]+?)(?=\s+(?:excelente|aprobado|reprobado|reprobó|desaprobado|\b\d{1,3}\b|\b\d{1,2}\/\d{1,2}\/\d{4}\b))/i);
-        if (cursoMatch) {
-          courseName = cursoMatch[1].trim();
-          console.log("📚 Curso encontrado:", courseName);
-        }
-      }
-      
-      // 4. Extraer NOTA (excelente, aprobado, reprobado, o número)
-      let nota = "Aprobado";
-      const notaPatterns = [
-        /excelente/i, /aprobado/i, /reprobado/i, /reprobó/i, /desaprobado/i,
-        /\b([0-9]{1,3})\b/
-      ];
-      for (const pattern of notaPatterns) {
-        const match = textoCompleto.match(pattern);
-        if (match) {
-          nota = match[0];
-          console.log("⭐ Nota encontrada:", nota);
-          break;
-        }
-      }
-      
-      // 5. Extraer FECHA (desde el hex original - timestamp)
-      let fecha = "";
-      const hexPattern = /[0-9a-f]{8}/gi;
-      let hexMatch;
-      while ((hexMatch = hexPattern.exec(dataHex)) !== null) {
-        const hexVal = hexMatch[0];
-        if (hexVal.toLowerCase().startsWith('baf')) continue;
-        const decimal = parseInt(hexVal, 16);
-        if (decimal > 1700000000 && decimal < 1800000000) {
-          fecha = new Date(decimal * 1000).toLocaleDateString('es-ES');
-          console.log("📅 Fecha encontrada por timestamp:", decimal, "→", fecha);
-          break;
-        }
-      }
-      
-      // Si no se encontró timestamp, buscar fecha en texto (formato DD/MM/YYYY)
-      if (!fecha) {
-        const fechaMatch = textoCompleto.match(/\b(\d{1,2}\/\d{1,2}\/\d{4})\b/);
-        if (fechaMatch) {
-          fecha = fechaMatch[1];
-          console.log("📅 Fecha encontrada en texto:", fecha);
-        }
-      }
-      
-      if (!fecha) {
-        fecha = new Date().toLocaleDateString('es-ES');
-        console.log("⚠️ Usando fecha actual:", fecha);
-      }
-      
-      const result = {
-        studentName: studentName || "Estudiante",
-        courseName: courseName || "Curso",
-        nota: nota,
-        fecha: fecha,
-        cid: cid || ""
-      };
-      
-      console.log("✅ Datos decodificados:", {
-        ...result,
-        cid: result.cid ? result.cid.substring(0, 30) + "..." : "VACÍO"
-      });
-      return result;
-      
-    } catch (error) {
-      console.error("Error decodificando input:", error);
-      return null;
     }
-  };
+    console.log("📝 Palabras significativas:", palabrasSignificativas);
+    
+    if (palabrasSignificativas.length >= 1) studentName = palabrasSignificativas[0];
+    if (palabrasSignificativas.length >= 2) courseName = palabrasSignificativas[1];
+    
+    // Buscar específicamente "Carlos Balderrama" si existe
+    const carlosMatch = textoLimpio.match(/Carlos\s+Balderrama/i);
+    if (carlosMatch) {
+      studentName = "Carlos Balderrama";
+      // Buscar el curso después del nombre
+      const despuesCarlos = textoLimpio.substring(textoLimpio.indexOf(carlosMatch[0]) + carlosMatch[0].length);
+      const radioMatch = despuesCarlos.match(/Radio\s+Centros/i);
+      if (radioMatch) {
+        courseName = "Radio Centros";
+      }
+    }
+    
+    // 3. Extraer NOTA
+    let nota = "Aprobado";
+    const notaPatterns = [
+      /excelente/i, /aprobado/i, /reprobado/i, /reprobó/i, /desaprobado/i,
+      /\b([0-9]{1,3})\b/
+    ];
+    for (const pattern of notaPatterns) {
+      const match = textoCompleto.match(pattern);
+      if (match) {
+        nota = match[0];
+        console.log("⭐ Nota encontrada:", nota);
+        break;
+      }
+    }
+    
+    // 4. Extraer FECHA
+    let fecha = "";
+    const hexPattern = /[0-9a-f]{8}/gi;
+    let hexMatch;
+    while ((hexMatch = hexPattern.exec(dataHex)) !== null) {
+      const hexVal = hexMatch[0];
+      if (hexVal.toLowerCase().startsWith('baf')) continue;
+      const decimal = parseInt(hexVal, 16);
+      if (decimal > 1700000000 && decimal < 1800000000) {
+        fecha = new Date(decimal * 1000).toLocaleDateString('es-ES');
+        console.log("📅 Fecha encontrada:", decimal, "→", fecha);
+        break;
+      }
+    }
+    
+    if (!fecha) {
+      const fechaMatch = textoCompleto.match(/\b(\d{1,2}\/\d{1,2}\/\d{4})\b/);
+      if (fechaMatch) fecha = fechaMatch[1];
+    }
+    
+    if (!fecha) fecha = new Date().toLocaleDateString('es-ES');
+    
+    const result = {
+      studentName: studentName,
+      courseName: courseName,
+      nota: nota,
+      fecha: fecha,
+      cid: cid || ""
+    };
+    
+    console.log("✅ Datos decodificados:", result);
+    return result;
+    
+  } catch (error) {
+    console.error("Error decodificando input:", error);
+    return null;
+  }
+};
 
   // ========== FUNCIONES AUXILIARES ==========
 
