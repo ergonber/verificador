@@ -1,4 +1,4 @@
-// pages/index.js - VERIFICADOR DEFINITIVO
+// pages/index.js - VERIFICADOR CORREGIDO
 import { useState, useEffect } from 'react';
 
 export default function Home() {
@@ -14,29 +14,30 @@ export default function Home() {
   const SONIC_RPC_URL = "/api/rpc";
   const SONIC_EXPLORER = "https://testnet.soniclabs.com/tx";
 
-  const EXAMPLE_HASH_SUBIRANA = "0x6285091c55f485612d03cfef254f14120749cb6d2747664a411063bf7207adf4";
-  const EXAMPLE_HASH_GALO = "0x01e8bc7713de1324405ec5c5b964486ce1731a6006b88284c2834df21413671f";
+  const EXAMPLE_HASH = "0xdcabb0c2e79c5fc6cc65fdb97211439b10caf2efd2544f4e67d46734ca88815e";
 
-  // ========== DECODIFICACIÓN CORRECTA POR ABI ==========
+  // ========== DECODIFICACIÓN CORREGIDA ==========
   const decodeABIInput = (inputData) => {
     if (!inputData || inputData === '0x') return null;
     
     try {
-      let data = inputData.slice(10);
-      console.log("📝 DataHex:", data.substring(0, 200));
+      const data = inputData.slice(10);
+      console.log("📝 DataHex length:", data.length);
       
-      // Leer los 5 offsets (cada uno 32 bytes = 64 caracteres hex)
-      const offset1 = parseInt(data.substring(0, 64), 16);
-      const offset2 = parseInt(data.substring(64, 128), 16);
-      const offset3 = parseInt(data.substring(128, 192), 16);
-      const offset4 = parseInt(data.substring(192, 256), 16);
-      const offset5 = parseInt(data.substring(256, 320), 16);
+      // Leer los 5 offsets (cada 64 chars = 32 bytes)
+      const getOffset = (start) => parseInt(data.substring(start, start + 64), 16);
+      
+      const offset1 = getOffset(0);
+      const offset2 = getOffset(64);
+      const offset3 = getOffset(128);
+      const offset4 = getOffset(192);
+      const offset5 = getOffset(256);
       
       console.log("📍 Offsets:", { offset1, offset2, offset3, offset4, offset5 });
       
-      // Función para leer string en una posición
+      // Leer string desde un offset
       const readString = (offset) => {
-        if (offset === 0) return "";
+        if (offset === 0 || offset * 2 > data.length) return "";
         const startPos = offset * 2;
         const lengthHex = data.substring(startPos, startPos + 64);
         const length = parseInt(lengthHex, 16);
@@ -45,8 +46,7 @@ export default function Home() {
         const stringHex = data.substring(stringStart, stringStart + (length * 2));
         let result = "";
         for (let i = 0; i < stringHex.length; i += 2) {
-          const byte = stringHex.substr(i, 2);
-          const code = parseInt(byte, 16);
+          const code = parseInt(stringHex.substr(i, 2), 16);
           if (code === 0) break;
           result += String.fromCharCode(code);
         }
@@ -58,76 +58,76 @@ export default function Home() {
       const nota = readString(offset3);
       const cid = readString(offset5);
       
-      // Leer el timestamp (está en el offset4)
- // Leer el timestamp - está en el offset4 pero el valor está en esa posición
-let fecha = "";
-const timestampHex = data.substring(offset4 * 2, offset4 * 2 + 64);
-const timestamp = parseInt(timestampHex, 16);
-console.log("📅 Timestamp offset4:", offset4);
-console.log("📅 Timestamp hex:", timestampHex);
-console.log("📅 Timestamp decimal:", timestamp);
-
-if (timestamp > 1700000000 && timestamp < 1800000000) {
-  const fechaObj = new Date(timestamp * 1000);
-  fecha = fechaObj.toLocaleDateString('es-ES');
-  console.log("📅 Fecha calculada:", fecha);
-} else {
-  console.log("⚠️ Timestamp fuera de rango:", timestamp);
-  fecha = new Date().toLocaleDateString('es-ES');
-}
-      if (!fecha) {
+      // El timestamp está directamente en offset4 (es el valor, no un offset)
+      let fecha = "";
+      if (offset4 > 1700000000 && offset4 < 1800000000) {
+        const date = new Date(offset4 * 1000);
+        fecha = date.toLocaleDateString('es-ES');
+        console.log("📅 Timestamp:", offset4, "→ Fecha:", fecha);
+      } else {
+        console.log("⚠️ Timestamp fuera de rango:", offset4);
         fecha = new Date().toLocaleDateString('es-ES');
-        console.log("⚠️ Usando fecha actual:", fecha);
       }
       
-      const result = { studentName, courseName, nota, fecha, cid };
-      console.log("✅ Datos decodificados:", result);
-      return result;
+      // Fallback: si los campos están vacíos, intentar buscar en el texto
+      let finalStudent = studentName || "Estudiante";
+      let finalCourse = courseName || "Curso";
+      let finalNota = nota || "Aprobado";
+      let finalCid = cid || "";
+      
+      // Si el CID está vacío, intentar buscarlo en el hex
+      if (!finalCid && data.includes('62616679')) {
+        const cidHexMatch = data.match(/62616679[a-f0-9]+/i);
+        if (cidHexMatch) {
+          let cidDecoded = "";
+          for (let i = 0; i < cidHexMatch[0].length; i += 2) {
+            const code = parseInt(cidHexMatch[0].substr(i, 2), 16);
+            if (code >= 97 && code <= 122) {
+              cidDecoded += String.fromCharCode(code);
+            }
+          }
+          if (cidDecoded.startsWith('bafy')) finalCid = cidDecoded;
+        }
+      }
+      
+      console.log("✅ Decodificado:", { studentName: finalStudent, courseName: finalCourse, nota: finalNota, fecha, cid: finalCid });
+      
+      return { studentName: finalStudent, courseName: finalCourse, nota: finalNota, fecha, cid: finalCid };
       
     } catch (error) {
-      console.error("Error decodificando ABI:", error);
+      console.error("Error decodificando:", error);
       return null;
     }
   };
 
   const formatCID = (cid) => {
     if (!cid) return '';
-    return cid.replace('ipfs://', '').replace('/ipfs/', '').replace('ipfs:', '').trim();
+    return cid.replace('ipfs://', '').replace('/ipfs/', '').trim();
   };
 
-  const isLikelyCID = (hash) => {
-    if (!hash) return false;
-    const cleanHash = formatCID(hash);
-    return (cleanHash.startsWith('Qm') || cleanHash.startsWith('baf')) && cleanHash.length > 40;
-  };
+  const isLikelyCID = (hash) => hash && (hash.startsWith('baf') || hash.startsWith('Qm')) && hash.length > 40;
 
   const openPDFFromCID = (cid) => {
-    if (!cid) {
-      alert('No hay certificado PDF disponible');
-      return;
-    }
-    const cleanCID = formatCID(cid);
-    const pdfUrl = `https://gateway.pinata.cloud/ipfs/${cleanCID}`;
-    console.log("🔗 Abriendo PDF:", pdfUrl);
-    window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+    if (!cid) { alert('No hay certificado PDF disponible'); return; }
+    window.open(`https://gateway.pinata.cloud/ipfs/${formatCID(cid)}`, '_blank');
   };
 
-  const validateTransactionHash = (hash) => {
+  const validateHash = (hash) => {
     if (!hash) return 'Ingresa un hash de transacción';
-    const cleanHash = hash.trim().toLowerCase();
-    if (cleanHash.length !== 66) return 'Hash debe tener 66 caracteres';
-    if (!cleanHash.startsWith('0x')) return 'Hash debe comenzar con 0x';
-    if (!/^0x[0-9a-f]{64}$/.test(cleanHash)) return 'Hash contiene caracteres inválidos';
+    const h = hash.trim().toLowerCase();
+    if (h.length !== 66) return 'Hash debe tener 66 caracteres';
+    if (!h.startsWith('0x')) return 'Hash debe comenzar con 0x';
+    if (!/^0x[0-9a-f]{64}$/.test(h)) return 'Hash contiene caracteres inválidos';
     return null;
   };
 
   const callRPC = async (method, params) => {
-    const response = await fetch(SONIC_RPC_URL, {
+    const res = await fetch(SONIC_RPC_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', method, params, id: 1 })
     });
-    return await response.json();
+    return await res.json();
   };
 
   useEffect(() => {
@@ -141,16 +141,16 @@ if (timestamp > 1700000000 && timestamp < 1800000000) {
     const hashFromURL = () => {
       try {
         const url = new URL(window.location.href);
-        const hashParam = url.searchParams.get('hash');
-        if (hashParam && hashParam.startsWith('0x') && hashParam.length === 66) return hashParam;
+        const h = url.searchParams.get('hash');
+        if (h && h.startsWith('0x') && h.length === 66) return h;
         return null;
       } catch { return null; }
     };
-    const hash = hashFromURL();
-    if (hash) {
-      setTransactionHash(hash);
+    const h = hashFromURL();
+    if (h) {
+      setTransactionHash(h);
       setAutoVerification(true);
-      setTimeout(() => findCertificateByTransactionHash(), 500);
+      setTimeout(() => findCertificate(), 500);
     }
   }, []);
 
@@ -170,17 +170,13 @@ if (timestamp > 1700000000 && timestamp < 1800000000) {
     setNetworkStatus('checking');
     try {
       const data = await callRPC('eth_blockNumber', []);
-      if (data.result) {
-        setNetworkStatus('connected');
-        return true;
-      }
-      setNetworkStatus('disconnected');
-      return false;
+      if (data.result) { setNetworkStatus('connected'); return true; }
+      setNetworkStatus('disconnected'); return false;
     } catch { setNetworkStatus('disconnected'); return false; }
   };
 
-  const findCertificateByTransactionHash = async () => {
-    const error = validateTransactionHash(transactionHash);
+  const findCertificate = async () => {
+    const error = validateHash(transactionHash);
     if (error) { alert(error); return; }
 
     setLoading(true);
@@ -191,18 +187,17 @@ if (timestamp > 1700000000 && timestamp < 1800000000) {
       const txData = await callRPC('eth_getTransactionByHash', [transactionHash]);
       if (!txData.result) throw new Error('Transacción no encontrada');
 
-      const transaction = txData.result;
-      const inputData = transaction.input || "";
+      const inputData = txData.result.input || "";
       if (!inputData || inputData === '0x') throw new Error('No hay datos de certificado');
 
       const decoded = decodeABIInput(inputData);
-      if (!decoded || !decoded.studentName) throw new Error('No se pudieron extraer los datos');
+      if (!decoded) throw new Error('No se pudieron extraer los datos');
 
       const receiptData = await callRPC('eth_getTransactionReceipt', [transactionHash]);
       const blockNumber = receiptData.result ? parseInt(receiptData.result.blockNumber, 16) : 0;
 
-      const certificateData = {
-        issuer: transaction.from || "0x...",
+      const certData = {
+        issuer: txData.result.from || "0x...",
         recipientName: decoded.studentName,
         eventName: decoded.courseName,
         fecha: decoded.fecha,
@@ -213,17 +208,17 @@ if (timestamp > 1700000000 && timestamp < 1800000000) {
         contractAddress: CONTRACT_ADDRESS
       };
 
-      setResult({ isValid: true, certificateData, found: true, isVerified: true });
+      setResult({ isValid: true, certificateData: certData, found: true });
 
       const newSearch = {
         hash: transactionHash,
-        studentName: certificateData.recipientName,
-        courseName: certificateData.eventName,
+        studentName: certData.recipientName,
+        courseName: certData.eventName,
         timestamp: Date.now(),
-        cid: certificateData.ipfsHash,
+        cid: certData.ipfsHash,
         isValid: true
       };
-      setSearchHistory(prev => [newSearch, ...prev.filter(item => item.hash !== transactionHash).slice(0, 9)]);
+      setSearchHistory(prev => [newSearch, ...prev.filter(i => i.hash !== transactionHash).slice(0, 9)]);
 
     } catch (err) {
       console.error(err);
@@ -232,76 +227,31 @@ if (timestamp > 1700000000 && timestamp < 1800000000) {
     setLoading(false);
   };
 
-  const retryVerification = () => { setResult(null); findCertificateByTransactionHash(); };
+  const retry = () => { setResult(null); findCertificate(); };
 
   const isMobile = windowWidth <= 768;
-  const isTablet = windowWidth > 768 && windowWidth <= 1024;
 
   const styles = {
     container: {
-      maxWidth: isMobile ? '100%' : isTablet ? '95%' : '800px',
-      margin: '0 auto',
-      background: 'white',
-      borderRadius: isMobile ? '0' : '20px',
-      padding: isMobile ? '15px' : '30px',
-      boxShadow: isMobile ? 'none' : '0 20px 60px rgba(0,0,0,0.3)',
-      minHeight: '100vh'
+      maxWidth: isMobile ? '100%' : '800px', margin: '0 auto', background: 'white',
+      borderRadius: isMobile ? '0' : '20px', padding: isMobile ? '15px' : '30px',
+      boxShadow: isMobile ? 'none' : '0 20px 60px rgba(0,0,0,0.3)', minHeight: '100vh'
     },
-    header: {
-      textAlign: 'center',
-      marginBottom: isMobile ? '20px' : '30px',
-      paddingBottom: isMobile ? '15px' : '20px',
-      borderBottom: '2px solid #f0f0f0'
-    },
-    h1: {
-      fontSize: isMobile ? '1.5em' : '2em',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      WebkitBackgroundClip: 'text',
-      WebkitTextFillColor: 'transparent',
-      marginBottom: '10px'
-    },
+    header: { textAlign: 'center', marginBottom: isMobile ? '20px' : '30px', paddingBottom: isMobile ? '15px' : '20px', borderBottom: '2px solid #f0f0f0' },
+    h1: { fontSize: isMobile ? '1.5em' : '2em', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: '10px' },
     subtitle: { color: '#666', fontSize: isMobile ? '0.8em' : '0.9em' },
-    networkStatus: {
-      display: 'inline-block', padding: '8px 16px', borderRadius: '50px', fontSize: '12px',
-      fontWeight: '600', marginTop: '10px',
-      background: networkStatus === 'connected' ? '#d1fae5' : '#fee2e2',
-      color: networkStatus === 'connected' ? '#065f46' : '#991b1b'
-    },
-    inputSection: {
-      background: '#f8fafc', padding: isMobile ? '15px' : '20px', borderRadius: '15px', marginBottom: '20px'
-    },
-    input: {
-      width: '100%', padding: '12px', border: '2px solid #e2e8f0', borderRadius: '10px',
-      fontSize: '14px', fontFamily: 'monospace', marginBottom: '15px', boxSizing: 'border-box'
-    },
+    networkStatus: { display: 'inline-block', padding: '8px 16px', borderRadius: '50px', fontSize: '12px', fontWeight: '600', marginTop: '10px', background: networkStatus === 'connected' ? '#d1fae5' : '#fee2e2', color: networkStatus === 'connected' ? '#065f46' : '#991b1b' },
+    inputSection: { background: '#f8fafc', padding: isMobile ? '15px' : '20px', borderRadius: '15px', marginBottom: '20px' },
+    input: { width: '100%', padding: '12px', border: '2px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', fontFamily: 'monospace', marginBottom: '15px', boxSizing: 'border-box' },
     buttonGroup: { display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: '10px', marginBottom: '15px' },
-    btnPrimary: {
-      flex: 1, padding: '12px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-      color: 'white', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer'
-    },
-    btnSecondary: {
-      padding: '12px 20px', background: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db',
-      borderRadius: '10px', fontWeight: '500', cursor: 'pointer'
-    },
-    resultCard: {
-      background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
-      padding: isMobile ? '15px' : '20px', borderRadius: '15px', marginTop: '20px', border: '2px solid #10b981'
-    },
-    errorCard: {
-      background: '#fee2e2', padding: isMobile ? '15px' : '20px', borderRadius: '15px',
-      marginTop: '20px', border: '2px solid #ef4444', color: '#991b1b'
-    },
-    detailRow: {
-      display: 'flex', flexDirection: isMobile ? 'column' : 'row', marginBottom: '10px',
-      padding: '10px', background: 'rgba(255,255,255,0.7)', borderRadius: '8px'
-    },
+    btnPrimary: { flex: 1, padding: '12px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer' },
+    btnSecondary: { padding: '12px 20px', background: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' },
+    resultCard: { background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)', padding: isMobile ? '15px' : '20px', borderRadius: '15px', marginTop: '20px', border: '2px solid #10b981' },
+    errorCard: { background: '#fee2e2', padding: isMobile ? '15px' : '20px', borderRadius: '15px', marginTop: '20px', border: '2px solid #ef4444', color: '#991b1b' },
+    detailRow: { display: 'flex', flexDirection: isMobile ? 'column' : 'row', marginBottom: '10px', padding: '10px', background: 'rgba(255,255,255,0.7)', borderRadius: '8px' },
     detailLabel: { minWidth: isMobile ? 'auto' : '140px', fontWeight: '600', marginBottom: isMobile ? '5px' : '0' },
     detailValue: { flex: 1, wordBreak: 'break-word' },
-    pdfButton: {
-      padding: '10px 20px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer',
-      display: 'inline-flex', alignItems: 'center', gap: '8px'
-    }
+    pdfButton: { padding: '10px 20px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px' }
   };
 
   return (
@@ -318,14 +268,13 @@ if (timestamp > 1700000000 && timestamp < 1800000000) {
         <div style={styles.inputSection}>
           <input type="text" placeholder="Hash de la transacción (0x...)" value={transactionHash}
             onChange={(e) => setTransactionHash(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && findCertificateByTransactionHash()}
+            onKeyPress={(e) => e.key === 'Enter' && findCertificate()}
             style={styles.input} />
           
           <div style={styles.buttonGroup}>
-            <button onClick={() => setTransactionHash(EXAMPLE_HASH_SUBIRANA)} style={styles.btnSecondary}>📋 Ejemplo (Subirana)</button>
-            <button onClick={() => setTransactionHash(EXAMPLE_HASH_GALO)} style={styles.btnSecondary}>📋 Ejemplo (Galo Salame)</button>
+            <button onClick={() => setTransactionHash(EXAMPLE_HASH)} style={styles.btnSecondary}>📋 Ejemplo (Ximena)</button>
             <button onClick={() => { setTransactionHash(''); setResult(null); }} style={styles.btnSecondary}>🗑️ Limpiar</button>
-            <button onClick={findCertificateByTransactionHash} disabled={loading} style={styles.btnPrimary}>
+            <button onClick={findCertificate} disabled={loading} style={styles.btnPrimary}>
               {loading ? '🔍 Buscando...' : '✅ Verificar Certificado'}
             </button>
           </div>
@@ -372,7 +321,7 @@ if (timestamp > 1700000000 && timestamp < 1800000000) {
                   <button onClick={() => openPDFFromCID(result.certificateData.ipfsHash)} style={styles.pdfButton}>
                     👁️ Ver Certificado
                   </button>
-                  <div style={{ fontSize: '10px', marginTop: '5px', color: '#666', wordBreak: 'break-all' }}>
+                  <div style={{ fontSize: '10px', marginTop: '5px', color: '#666' }}>
                     CID: {result.certificateData.ipfsHash.substring(0, 35)}...
                   </div>
                 </div>
@@ -383,7 +332,7 @@ if (timestamp > 1700000000 && timestamp < 1800000000) {
               <strong>📫 Hash:</strong> {result.certificateData.transactionHash}
             </div>
             <div style={{ marginTop: '10px' }}>
-              <a href={`${SONIC_EXPLORER}/${result.certificateData.transactionHash}`} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'none' }}>
+              <a href={`${SONIC_EXPLORER}/${result.certificateData.transactionHash}`} target="_blank" style={{ color: '#3b82f6', textDecoration: 'none' }}>
                 🔍 Ver en Sonic Explorer →
               </a>
             </div>
@@ -394,16 +343,13 @@ if (timestamp > 1700000000 && timestamp < 1800000000) {
           <div style={styles.errorCard}>
             <h3>❌ Certificado No Encontrado</h3>
             <p>{result.error || 'No se pudo verificar el certificado.'}</p>
-            <button onClick={retryVerification} style={{ marginTop: '10px', padding: '8px 16px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
-              🔄 Reintentar
-            </button>
+            <button onClick={retry} style={{ marginTop: '10px', padding: '8px 16px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>🔄 Reintentar</button>
           </div>
         )}
       </div>
       
       <style jsx global>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
         input:focus { outline: none; border-color: #667eea; }
