@@ -59,20 +59,22 @@ export default function Home() {
       const cid = readString(offset5);
       
       // Leer el timestamp (está en el offset4)
-    let fecha = "";
-    const hexPattern = /[0-9a-f]{8}/gi;
-    let hexMatch;
-    while ((hexMatch = hexPattern.exec(dataHex)) !== null) {
-      const hexVal = hexMatch[0];
-      if (hexVal.toLowerCase().startsWith('baf')) continue;
-      const decimal = parseInt(hexVal, 16);
-      if (decimal > 1700000000 && decimal < 1800000000) {
-        fecha = new Date(decimal * 1000).toLocaleDateString('es-ES');
-        console.log("📅 Fecha:", decimal, "→", fecha);
-        break;
-      }
-    }
-      
+ // Leer el timestamp - está en el offset4 pero el valor está en esa posición
+let fecha = "";
+const timestampHex = data.substring(offset4 * 2, offset4 * 2 + 64);
+const timestamp = parseInt(timestampHex, 16);
+console.log("📅 Timestamp offset4:", offset4);
+console.log("📅 Timestamp hex:", timestampHex);
+console.log("📅 Timestamp decimal:", timestamp);
+
+if (timestamp > 1700000000 && timestamp < 1800000000) {
+  const fechaObj = new Date(timestamp * 1000);
+  fecha = fechaObj.toLocaleDateString('es-ES');
+  console.log("📅 Fecha calculada:", fecha);
+} else {
+  console.log("⚠️ Timestamp fuera de rango:", timestamp);
+  fecha = new Date().toLocaleDateString('es-ES');
+}
       if (!fecha) {
         fecha = new Date().toLocaleDateString('es-ES');
         console.log("⚠️ Usando fecha actual:", fecha);
